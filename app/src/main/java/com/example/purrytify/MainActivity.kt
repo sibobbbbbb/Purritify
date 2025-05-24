@@ -2,6 +2,8 @@ package com.example.purrytify
 
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -46,6 +48,8 @@ import com.example.purrytify.util.NetworkConnectionObserver
 import com.example.purrytify.util.TokenManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.example.purrytify.viewmodels.MainViewModel
 import com.example.purrytify.viewmodels.ViewModelFactory
 import kotlinx.coroutines.Dispatchers
@@ -343,6 +347,50 @@ class MainActivity : ComponentActivity() {
                 } catch (e: Exception) {
                     Log.e(TAG, "Error checking current song after login: ${e.message}")
                     mainViewModel.handleLogout()
+                }
+            }
+        }
+    }
+
+    private fun requestBluetoothPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val permissions = arrayOf(
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_SCAN
+            )
+
+            if (permissions.any {
+                    ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+                }) {
+                ActivityCompat.requestPermissions(this, permissions, BLUETOOTH_PERMISSION_REQUEST_CODE)
+            }
+        }
+    }
+
+    companion object {
+        private const val BLUETOOTH_PERMISSION_REQUEST_CODE = 1001
+    }
+
+    // Handle permission result:
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            BLUETOOTH_PERMISSION_REQUEST_CODE -> {
+                if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                    // Permissions granted, refresh devices
+                    Log.d(TAG, "Bluetooth permissions granted")
+                } else {
+                    // Show message that Bluetooth devices won't be available
+                    Toast.makeText(
+                        this,
+                        "Bluetooth permission required to see wireless audio devices",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }

@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.volley)
     implementation(libs.espresso.core)
     implementation(libs.androidx.recyclerview.v130)
+    implementation(libs.androidx.compiler)
     val composeBom = platform("androidx.compose:compose-bom:2024.02.02")
     implementation(composeBom)
     androidTestImplementation(composeBom)

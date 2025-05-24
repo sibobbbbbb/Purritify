@@ -1,6 +1,7 @@
 package com.example.purrytify.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -8,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.purrytify.MainActivity
@@ -35,9 +38,9 @@ import com.example.purrytify.viewmodels.ViewModelFactory
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
+    navController: NavController,
     profileViewModel: ProfileViewModel = viewModel(
         factory = ViewModelFactory.getInstance(LocalContext.current)
     )
@@ -149,7 +152,8 @@ fun ProfileScreen(
                     listenedSongs = listenedSongs,
                     onLogout = {
                         (context as? MainActivity)?.logout()
-                    }
+                    },
+                    navController = navController
                 )
             }
         }
@@ -198,9 +202,10 @@ fun ProfileContent(
     totalSongs: Int,
     likedSongs: Int,
     listenedSongs: Int,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    navController: NavController
 ) {
-    val context = LocalContext.current
+    LocalContext.current
 
     Column(
         modifier = Modifier
@@ -304,6 +309,21 @@ fun ProfileContent(
                 }
             }
         }
+
+        // Spacer to push the logout button to the bottom
+        Spacer(modifier = Modifier.height(48.dp))
+
+        ListItem(
+            headlineContent = { Text("Audio Output Device") },
+            supportingContent = { Text("Select audio output device") },
+            leadingContent = {
+                Icon(Icons.Default.Speaker, contentDescription = null)
+            },
+            modifier = Modifier.clickable {
+                navController.navigate("audio_devices")
+            }
+        )
+
 
         // Spacer to push the logout button to the bottom
         Spacer(modifier = Modifier.height(48.dp))

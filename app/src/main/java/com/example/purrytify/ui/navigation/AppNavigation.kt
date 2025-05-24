@@ -13,6 +13,7 @@ import com.example.purrytify.ui.screens.ProfileScreen
 import com.example.purrytify.util.NetworkConnectionObserver
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.example.purrytify.ui.screens.AudioDeviceScreen
 import com.example.purrytify.ui.screens.QueueScreen
 
 object Destinations {
@@ -20,6 +21,7 @@ object Destinations {
     const val LIBRARY_ROUTE = "library"
     const val PROFILE_ROUTE = "profile"
     const val QUEUE_ROUTE = "queue"
+    const val AUDIO_DEVICES_ROUTE = "audio_devices"
 }
 
 @Composable
@@ -53,6 +55,11 @@ fun AppNavigation(
         composable(Destinations.QUEUE_ROUTE) {
             QueueScreen(
                 onNavigateBack = { navController.navigateUp() }
+            )
+        }
+        composable(Destinations.AUDIO_DEVICES_ROUTE) {
+            AudioDeviceScreen(
+                onBackClick = { navController.popBackStack() }
             )
         }
     }

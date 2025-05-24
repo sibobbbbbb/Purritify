@@ -51,6 +51,9 @@ class ViewModelFactory(appContext: Context) : ViewModelProvider.Factory {
             modelClass.isAssignableFrom(MainViewModel::class.java) -> {
                 MainViewModel(app.songRepository) as T
             }
+            modelClass.isAssignableFrom(AudioDeviceViewModel::class.java) -> {
+                AudioDeviceViewModel(contextRef.get() as android.app.Application) as T
+            }
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
     }

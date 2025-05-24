@@ -1,14 +1,20 @@
 package com.example.purrytify.service
 
-import android.net.Uri
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Binder
 import android.os.IBinder
 import android.util.Log
+import androidx.core.net.toUri
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.purrytify.models.Song
+import com.example.purrytify.receivers.AudioNoisyReceiver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.IOException
@@ -42,6 +48,16 @@ class MediaPlayerService : Service() {
     private val binder = MediaPlayerBinder()
     private lateinit var localBroadcastManager: LocalBroadcastManager
 
+
+    // Audio focus management
+    private lateinit var audioManager: AudioManager
+    private lateinit var audioFocusRequest: AudioFocusRequest
+
+    // Receiver for audio noisy events (e.g., headphone unplugged)
+    private lateinit var audioNoisyReceiver: AudioNoisyReceiver
+    private var audioNoisyReceiverRegistered = false
+
+
     inner class MediaPlayerBinder : Binder() {
         fun getService(): MediaPlayerService = this@MediaPlayerService
     }
@@ -56,11 +72,33 @@ class MediaPlayerService : Service() {
         Log.d(TAG, "Service created")
 
         localBroadcastManager = LocalBroadcastManager.getInstance(this)
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // Setup audio focus request
+        audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            .setAcceptsDelayedFocusGain(true)
+            .setOnAudioFocusChangeListener(audioFocusChangeListener)
+            .build()
+
+        // Initialize audio noisy receiver
+        audioNoisyReceiver = AudioNoisyReceiver {
+            // Pause playback when audio becomes noisy
+            if (mediaPlayer.isPlaying) {
+                togglePlayPause()
+
+                // Send broadcast to update UI
+                val intent = Intent("com.example.purrytify.AUDIO_BECOMING_NOISY")
+                localBroadcastManager.sendBroadcast(intent)
+            }
+        }
 
         // Set up completion listener
-        // In MediaPlayerService.kt, update the media player completion listener
-
-// Set up completion listener
         mediaPlayer.setOnCompletionListener {
             Log.d(TAG, "Song completed playback")
             _isPlaying.value = false
@@ -68,7 +106,7 @@ class MediaPlayerService : Service() {
             // Handle repeat one mode
             if (repeatMode == 2) {
                 Log.d(TAG, "Repeat One mode active, replaying current song")
-                _currentSong.value?.let { song ->
+                _currentSong.value?.let { _ ->
                     // Replay the same song
                     playAgain()
                 }
@@ -93,7 +131,7 @@ class MediaPlayerService : Service() {
         }
 
         // Set up error listener
-        mediaPlayer.setOnErrorListener { mp, what, extra ->
+        mediaPlayer.setOnErrorListener { _, what, extra ->
             Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
             true // Return true to indicate we handled the error
         }
@@ -102,6 +140,20 @@ class MediaPlayerService : Service() {
     fun playSong(song: Song) {
         try {
             Log.d(TAG, "Playing song: ${song.title}, path: ${song.filePath}")
+
+            // Request audio focus
+            if (!requestAudioFocus()) {
+                Log.e(TAG, "Failed to get audio focus")
+                return
+            }
+
+            // Register audio noisy receiver
+            if (!audioNoisyReceiverRegistered) {
+                val filter = IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+                registerReceiver(audioNoisyReceiver, filter)
+                audioNoisyReceiverRegistered = true
+            }
+
             // Reset end of playback flag when starting a new song
             _reachedEndOfPlayback.value = false
 
@@ -114,7 +166,7 @@ class MediaPlayerService : Service() {
             // Check if path is content URI or local file path
             if (song.filePath.startsWith("content://")) {
                 // Use ContentResolver for content URI
-                val uri = Uri.parse(song.filePath)
+                val uri = song.filePath.toUri()
                 val contentResolver = applicationContext.contentResolver
                 val afd = contentResolver.openFileDescriptor(uri, "r")
 
@@ -144,8 +196,10 @@ class MediaPlayerService : Service() {
 
         } catch (e: IOException) {
             Log.e(TAG, "Error playing song: ${e.message}")
+            abandonAudioFocus()
         } catch (e: Exception) {
             Log.e(TAG, "Unexpected error: ${e.message}")
+            abandonAudioFocus()
             e.printStackTrace()
         }
     }
@@ -246,7 +300,79 @@ class MediaPlayerService : Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "Service destroyed")
+
+        // Unregister audio noisy receiver
+        if (audioNoisyReceiverRegistered) {
+            unregisterReceiver(audioNoisyReceiver)
+            audioNoisyReceiverRegistered = false
+        }
+
+        abandonAudioFocus()
         mediaPlayer.release()
         super.onDestroy()
+    }
+
+    // Audio focus listener
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                // Resume playback atau increase volume
+                Log.d(TAG, "Audio focus gained")
+                if (!mediaPlayer.isPlaying && _isPlaying.value) {
+                    mediaPlayer.start()
+                }
+                mediaPlayer.setVolume(1.0f, 1.0f)
+            }
+
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                // Lost focus for an unbounded amount of time
+                Log.d(TAG, "Audio focus lost")
+                if (mediaPlayer.isPlaying) {
+                    mediaPlayer.pause()
+                    _isPlaying.value = false
+                }
+            }
+
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // Lost focus for a short time
+                Log.d(TAG, "Audio focus lost transient")
+                if (mediaPlayer.isPlaying) {
+                    mediaPlayer.pause()
+                }
+            }
+
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                // Lost focus but can duck (lower volume)
+                Log.d(TAG, "Audio focus lost - can duck")
+                mediaPlayer.setVolume(0.3f, 0.3f)
+            }
+        }
+    }
+
+    // Add method untuk request audio focus
+    private fun requestAudioFocus(): Boolean {
+        val result = audioManager.requestAudioFocus(audioFocusRequest)
+
+        return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+
+    // Add method untuk abandon audio focus
+    private fun abandonAudioFocus() {
+        audioManager.abandonAudioFocusRequest(audioFocusRequest)
+    }
+
+    // Add method untuk handle audio routing changes
+    fun handleAudioRouteChange() {
+        // MediaPlayer akan otomatis route ke device yang aktif
+        // Tapi kita bisa add additional handling jika diperlukan
+        Log.d(TAG, "Audio route changed")
+
+        // Optional: Pause dan resume untuk ensure smooth transition
+        if (mediaPlayer.isPlaying) {
+            val currentPosition = mediaPlayer.currentPosition
+            mediaPlayer.pause()
+            mediaPlayer.seekTo(currentPosition)
+            mediaPlayer.start()
+        }
     }
 }

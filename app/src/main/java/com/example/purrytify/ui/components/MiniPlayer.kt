@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.purrytify.R
+import com.example.purrytify.ui.components.AudioDeviceIndicatorMini
 
 
 @Composable
@@ -108,6 +109,12 @@ fun MiniPlayer(
                     tint = Color.White
                 )
             }
+
+            AudioDeviceIndicatorMini(
+                onClick = {
+                    // TODO: Implement audio device selection logic
+                }
+            )
         }
     }
 }
