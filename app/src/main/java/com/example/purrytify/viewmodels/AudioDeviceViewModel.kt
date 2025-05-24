@@ -58,11 +58,20 @@ class AudioDeviceViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             audioDeviceManager.audioDevices.collect { devices ->
                 Log.d(TAG, "Received ${devices.size} audio devices")
+
+                devices.forEach { device ->
+                    Log.d(TAG, "  - Name: ${device.name}, Type: ${device.type}, State: ${device.connectionState}, IsActive: ${device.isActive}, ID: ${device.id}")
+                }
+
                 _audioDevices.value = devices
 
                 // Update active device
                 _activeDevice.value = devices.firstOrNull { it.isActive }
-
+                if (_activeDevice.value != null) {
+                    Log.d(TAG, "Active device updated: Name: ${_activeDevice.value?.name}, Type: ${_activeDevice.value?.type}")
+                } else {
+                    Log.d(TAG, "No active device found in the new list.")
+                }
                 // Check for disconnection of previously active device
                 checkForDisconnection(devices)
             }

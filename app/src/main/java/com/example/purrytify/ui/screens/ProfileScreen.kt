@@ -314,14 +314,34 @@ fun ProfileContent(
         Spacer(modifier = Modifier.height(48.dp))
 
         ListItem(
-            headlineContent = { Text("Audio Output Device") },
-            supportingContent = { Text("Select audio output device") },
-            leadingContent = {
-                Icon(Icons.Default.Speaker, contentDescription = null)
+            headlineContent = {
+                Text(
+                    "Audio Output Device",
+//                    color = Color.White
+                )
             },
-            modifier = Modifier.clickable {
-                navController.navigate("audio_devices")
-            }
+            supportingContent = {
+                Text(
+                    "Select audio output device",
+//                    color = Color.White.copy(alpha = 0.7f)
+                )
+            },
+            leadingContent = {
+                Icon(
+                    Icons.Default.Speaker,
+                    contentDescription = null,
+//                    tint = Color.White
+                )
+            },
+            modifier = Modifier
+                .clickable {
+                    navController.navigate("audio_devices")
+                }
+                .background(
+                    BACKGROUND_COLOR,
+                    RoundedCornerShape(8.dp)
+                )
+                .padding(4.dp)
         )
 
 

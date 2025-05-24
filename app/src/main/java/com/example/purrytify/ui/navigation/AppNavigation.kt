@@ -47,7 +47,7 @@ fun AppNavigation(
         composable(Destinations.PROFILE_ROUTE) {
             networkConnectionObserver.checkAndUpdateConnectionStatus()
             if (isConnected) {
-                ProfileScreen()
+                ProfileScreen(navController = navController)
             } else {
                 NoInternetScreen()
             }

@@ -427,14 +427,12 @@ fun PlayerScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         // Audio device indicator
-        AudioDeviceIndicator(
-            onClick = {
-                if (navController != null) {
-                    navController.navigate("audio_devices")
-                }
-            },
-            modifier = Modifier.align(Alignment.Center)
-        )
+//        AudioDeviceIndicator(
+//            onClick = {
+//                navController?.navigate("audio_devices")
+//            },
+//            modifier = Modifier.align(Alignment.Center)
+//        )
     }
 }
 

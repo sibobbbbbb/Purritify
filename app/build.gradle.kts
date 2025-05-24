@@ -62,7 +62,6 @@ dependencies {
     implementation(libs.volley)
     implementation(libs.espresso.core)
     implementation(libs.androidx.recyclerview.v130)
-    implementation(libs.androidx.compiler)
     val composeBom = platform("androidx.compose:compose-bom:2024.02.02")
     implementation(composeBom)
     androidTestImplementation(composeBom)
@@ -130,4 +129,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-process:2.7.0")
     implementation ("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
     implementation ("com.google.accompanist:accompanist-swiperefresh:0.25.1")
+
+    implementation("androidx.media:media:1.6.0")
 }

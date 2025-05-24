@@ -17,6 +17,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.android.volley.BuildConfig
 import com.example.purrytify.models.AudioDevice
 import com.example.purrytify.models.AudioDeviceType
 import com.example.purrytify.models.ConnectionState
@@ -383,6 +384,30 @@ class AudioDeviceManager(private val context: Context) {
             audioManager.mode = AudioManager.MODE_NORMAL
         } catch (e: Exception) {
             Log.e(TAG, "Error clearing audio routing: ${e.message}")
+        }
+    }
+
+    private fun getMockDevicesForTesting(): List<AudioDevice> {
+        return if (BuildConfig.DEBUG) {
+            listOf(
+                AudioDevice(
+                    id = "mock_bluetooth_1",
+                    name = "Mock AirPods",
+                    type = AudioDeviceType.BLUETOOTH_A2DP,
+                    address = "00:00:00:00:00:01",
+                    connectionState = ConnectionState.AVAILABLE,
+                    isActive = false
+                ),
+                AudioDevice(
+                    id = "mock_wired",
+                    name = "Mock Wired Headset",
+                    type = AudioDeviceType.WIRED_HEADSET,
+                    connectionState = ConnectionState.CONNECTED,
+                    isActive = false
+                )
+            )
+        } else {
+            emptyList()
         }
     }
 }

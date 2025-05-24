@@ -40,7 +40,8 @@ fun MiniPlayer(
     currentSong: Song?,
     isPlaying: Boolean,
     onPlayPauseClick: () -> Unit,
-    onPlayerClick: () -> Unit
+    onPlayerClick: () -> Unit,
+    onAudioDeviceClick: (() -> Unit)? = null
 ) {
     if (currentSong != null) {
         Row(
@@ -110,11 +111,11 @@ fun MiniPlayer(
                 )
             }
 
-            AudioDeviceIndicatorMini(
-                onClick = {
-                    // TODO: Implement audio device selection logic
-                }
-            )
+            if (onAudioDeviceClick != null) {
+                AudioDeviceIndicatorMini(
+                    onClick = onAudioDeviceClick
+                )
+            }
         }
     }
 }

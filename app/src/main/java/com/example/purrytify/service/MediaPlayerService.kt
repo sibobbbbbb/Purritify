@@ -363,16 +363,54 @@ class MediaPlayerService : Service() {
 
     // Add method untuk handle audio routing changes
     fun handleAudioRouteChange() {
-        // MediaPlayer akan otomatis route ke device yang aktif
-        // Tapi kita bisa add additional handling jika diperlukan
         Log.d(TAG, "Audio route changed")
+        try {
+            if (mediaPlayer.isPlaying) {
+                val currentPosition = mediaPlayer.currentPosition
+                mediaPlayer.pause()
 
-        // Optional: Pause dan resume untuk ensure smooth transition
-        if (mediaPlayer.isPlaying) {
-            val currentPosition = mediaPlayer.currentPosition
-            mediaPlayer.pause()
-            mediaPlayer.seekTo(currentPosition)
-            mediaPlayer.start()
+                Thread.sleep(100)
+
+                mediaPlayer.seekTo(currentPosition)
+                mediaPlayer.start()
+
+                Log.d(TAG, "Audio route transition completed, resumed at position: $currentPosition")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling audio route change: ${e.message}")
+        }
+    }
+
+    // Set audio attributes based on the device type
+    fun setAudioAttributesForDevice(deviceType: String) {
+        try {
+            val audioAttributes = when (deviceType) {
+                "BLUETOOTH" -> {
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                }
+                "WIRED_HEADSET" -> {
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                }
+                else -> {
+                    // Default untuk speaker internal
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                }
+            }
+
+            mediaPlayer.setAudioAttributes(audioAttributes)
+            Log.d(TAG, "Audio attributes set for device type: $deviceType")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting audio attributes: ${e.message}")
         }
     }
 }
