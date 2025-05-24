@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- External files directory untuk foto dari camera -->
+    <external-files-path
+        name="external_files"
+        path="." />
+
+    <!-- Pictures directory untuk menyimpan foto profile -->
+    <external-files-path
+        name="pictures"
+        path="Pictures/" />
+
+    <!-- Cache directory untuk file temporary -->
+    <cache-path
+        name="cache"
+        path="." />
+
+    <!-- Internal files directory jika diperlukan -->
+    <files-path
+        name="files"
+        path="." />
+</paths>

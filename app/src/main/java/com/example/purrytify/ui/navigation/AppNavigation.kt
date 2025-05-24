@@ -10,6 +10,7 @@ import com.example.purrytify.ui.components.NoInternetScreen
 import com.example.purrytify.ui.screens.HomeScreen
 import com.example.purrytify.ui.screens.LibraryScreen
 import com.example.purrytify.ui.screens.ProfileScreen
+import com.example.purrytify.ui.screens.EditProfileScreen
 import com.example.purrytify.util.NetworkConnectionObserver
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -20,6 +21,7 @@ object Destinations {
     const val HOME_ROUTE = "home"
     const val LIBRARY_ROUTE = "library"
     const val PROFILE_ROUTE = "profile"
+    const val EDIT_PROFILE_ROUTE = "edit_profile"
     const val QUEUE_ROUTE = "queue"
     const val AUDIO_DEVICES_ROUTE = "audio_devices"
 }
@@ -48,6 +50,14 @@ fun AppNavigation(
             networkConnectionObserver.checkAndUpdateConnectionStatus()
             if (isConnected) {
                 ProfileScreen(navController = navController)
+            } else {
+                NoInternetScreen()
+            }
+        }
+        composable(Destinations.EDIT_PROFILE_ROUTE) {
+            networkConnectionObserver.checkAndUpdateConnectionStatus()
+            if (isConnected) {
+                EditProfileScreen(navController = navController)
             } else {
                 NoInternetScreen()
             }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material3.*
@@ -110,7 +111,7 @@ fun ProfileScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header with refresh button
+            // Header with refresh and edit buttons
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -125,12 +126,26 @@ fun ProfileScreen(
                     fontSize = 24.sp
                 )
 
-                IconButton(onClick = { profileViewModel.refreshData() }) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refresh Profile",
-                        tint = Color.White
-                    )
+                Row {
+                    // Edit Profile Button
+                    IconButton(onClick = {
+                        navController.navigate("edit_profile")
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Profile",
+                            tint = GREEN_COLOR
+                        )
+                    }
+
+                    // Refresh Button
+                    IconButton(onClick = { profileViewModel.refreshData() }) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh Profile",
+                            tint = Color.White
+                        )
+                    }
                 }
             }
 
@@ -310,9 +325,10 @@ fun ProfileContent(
             }
         }
 
-        // Spacer to push the logout button to the bottom
+        // Spacer to push buttons down
         Spacer(modifier = Modifier.height(48.dp))
 
+        // Audio Output Device Setting
         ListItem(
             headlineContent = {
                 Text(
@@ -343,7 +359,6 @@ fun ProfileContent(
                 )
                 .padding(4.dp)
         )
-
 
         // Spacer to push the logout button to the bottom
         Spacer(modifier = Modifier.height(48.dp))

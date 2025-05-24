@@ -39,6 +39,12 @@ class ViewModelFactory(appContext: Context) : ViewModelProvider.Factory {
             modelClass.isAssignableFrom(ProfileViewModel::class.java) -> {
                 ProfileViewModel(authRepository, userRepository, app.songRepository) as T
             }
+            modelClass.isAssignableFrom(EditProfileViewModel::class.java) -> {
+                EditProfileViewModel(
+                    contextRef.get() as android.app.Application,
+                    userRepository
+                ) as T
+            }
             modelClass.isAssignableFrom(SongViewModel::class.java) -> {
                 SongViewModel(app.songRepository) as T
             }
