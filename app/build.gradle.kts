@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("kotlin-kapt")
+    id("kotlin-parcelize")
 }
 
 android {
@@ -134,8 +135,6 @@ dependencies {
     // Media
     implementation("androidx.media:media:1.6.0")
 
-    // === DEPENDENCIES UNTUK EDIT PROFILE (FIXED) ===
-
     // Location services (Google Play Services)
     implementation("com.google.android.gms:play-services-location:21.0.1")
     implementation("com.google.android.gms:play-services-maps:18.2.0")
@@ -146,7 +145,7 @@ dependencies {
     // File utilities
     implementation("commons-io:commons-io:2.11.0")
 
-    // Multipart request untuk Retrofit (sudah ada sebelumnya)
+    // Multipart request untuk Retrofit
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 }
