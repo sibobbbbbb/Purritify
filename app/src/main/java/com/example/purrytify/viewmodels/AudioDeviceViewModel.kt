@@ -13,12 +13,6 @@ import kotlinx.coroutines.launch
 
 /**
  * ViewModel untuk mengelola state audio devices
- *
- * Alur kerja:
- * 1. Initialize AudioDeviceManager
- * 2. Collect audio devices dari manager
- * 3. Expose devices dan loading state ke UI
- * 4. Handle device selection dan error
  */
 class AudioDeviceViewModel(application: Application) : AndroidViewModel(application) {
     private val TAG = "AudioDeviceViewModel"

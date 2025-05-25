@@ -14,6 +14,11 @@ import android.os.Bundle
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import com.example.purrytify.models.LocationResult
+import com.google.android.libraries.places.api.Places
+import com.google.android.libraries.places.api.model.Place
+import com.google.android.libraries.places.widget.Autocomplete
+import com.google.android.libraries.places.widget.AutocompleteActivity
+import com.google.android.libraries.places.widget.model.AutocompleteActivityMode
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import java.util.Locale
@@ -27,6 +32,125 @@ class LocationHelper(private val context: Context) {
         Geocoder(context, Locale("id", "ID"))
     } else {
         null
+    }
+
+    init {
+        // Initialize Places SDK
+        if (!Places.isInitialized()) {
+            // Use a default API key or request it from your backend
+            Places.initialize(context, "AIzaSyDNMbD-13cjo0Cbdj8EWjP3DyxBenupkbY")
+        }
+    }
+
+    /**
+     * Fungsi untuk membuat Intent Place Autocomplete
+     */
+    fun createLocationPickerIntent(): Intent {
+        Log.d(TAG, "Creating location picker intent")
+
+        // Fields dari place yang dipilih
+        val fields = listOf(
+            Place.Field.ID,
+            Place.Field.NAME,
+            Place.Field.ADDRESS,
+            Place.Field.LAT_LNG,
+            Place.Field.ADDRESS_COMPONENTS
+        )
+
+        // Buat intent untuk Autocomplete
+        val intent = Autocomplete.IntentBuilder(AutocompleteActivityMode.FULLSCREEN, fields)
+            .build(context)
+
+        Log.d(TAG, "Location picker intent created")
+        return intent
+    }
+
+    /**
+     * Parse hasil dari Place Autocomplete
+     */
+    fun parsePlacePickerResult(resultCode: Int, data: Intent?): LocationResult? {
+        Log.d(TAG, "=== PARSING PLACE PICKER RESULT ===")
+        Log.d(TAG, "Result code: $resultCode")
+
+        when (resultCode) {
+            AutocompleteActivity.RESULT_OK -> {
+                data?.let {
+                    val place = Autocomplete.getPlaceFromIntent(data)
+                    Log.d(TAG, "Place: ${place.name}")
+                    Log.d(TAG, "Address: ${place.address}")
+                    Log.d(TAG, "LatLng: ${place.latLng}")
+                    Log.d(TAG, "Address Components: ${place.addressComponents}")
+
+                    // Extract country code dari address components
+                    var countryCode = "ID" // Default
+                    var countryName = "Indonesia" // Default
+
+                    place.addressComponents?.asList()?.forEach { component ->
+                        Log.d(TAG, "Component: ${component.name}, Types: ${component.types}")
+                        if (component.types.contains("country")) {
+                            countryName = component.name
+                            countryCode = component.shortName ?: "ID"
+                            Log.d(TAG, "Found country: $countryName ($countryCode)")
+                        }
+                    }
+
+                    // Jika tidak ada address components, coba dengan geocoder
+                    if (place.latLng != null && countryCode == "ID") {
+                        val geocoderResult = locationToCountryCode(
+                            place.latLng!!.latitude,
+                            place.latLng!!.longitude
+                        )
+                        if (geocoderResult != null) {
+                            countryCode = geocoderResult.countryCode
+                            countryName = geocoderResult.countryName
+                        }
+                    }
+
+                    return LocationResult(
+                        countryCode = countryCode,
+                        countryName = countryName,
+                        address = place.address ?: place.name,
+                        latitude = place.latLng?.latitude,
+                        longitude = place.latLng?.longitude
+                    )
+                }
+            }
+            AutocompleteActivity.RESULT_ERROR -> {
+                data?.let {
+                    val status = Autocomplete.getStatusFromIntent(data)
+                    Log.e(TAG, "Error: ${status.statusMessage}")
+                }
+            }
+            AutocompleteActivity.RESULT_CANCELED -> {
+                Log.d(TAG, "User canceled place selection")
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Alternatif: Buat intent untuk memilih lokasi dengan maps biasa
+     * Ini adalah fallback jika Place Picker tidak tersedia
+     */
+    fun createMapsSelectorIntent(): Intent {
+        Log.d(TAG, "Creating maps selector intent")
+
+        // Gunakan action PICK dengan data geo
+        val intent = Intent(Intent.ACTION_PICK).apply {
+            setDataAndType(Uri.parse("content://com.google.android.maps/"), "vnd.android.cursor.dir/vnd.google.android.maps")
+        }
+
+        // Jika intent tidak bisa di-resolve, gunakan VIEW action
+        if (intent.resolveActivity(context.packageManager) == null) {
+            Log.d(TAG, "ACTION_PICK not available, using ACTION_VIEW")
+            return Intent(Intent.ACTION_VIEW).apply {
+                data = Uri.parse("geo:0,0?q=")
+                setPackage("com.google.android.apps.maps")
+            }
+        }
+
+        return intent
     }
 
     /**

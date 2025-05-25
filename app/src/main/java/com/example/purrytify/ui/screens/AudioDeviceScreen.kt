@@ -29,13 +29,6 @@ import com.example.purrytify.viewmodels.AudioDeviceViewModel
 
 /**
  * Screen untuk menampilkan dan memilih perangkat audio
- *
- * Alur UI:
- * 1. Header dengan tombol back dan refresh
- * 2. Active device card (device yang sedang aktif)
- * 3. List available devices
- * 4. Loading indicator saat switching
- * 5. Error/Success snackbar
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -66,6 +66,10 @@ import com.example.purrytify.viewmodels.ViewModelFactory
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.TimeUnit
+import androidx.activity.ComponentActivity
+import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.Share
+import com.example.purrytify.ui.components.ShareOptionsDialog
 import com.example.purrytify.ui.components.AudioDeviceIndicator
 
 @Composable
@@ -253,6 +257,45 @@ fun PlayerScreen(
                             tint = Color.White.copy(alpha = 0.7f),
                             modifier = Modifier.size(24.dp)
                         )
+                    }
+
+                    // Share button (only for online songs) - TAMBAHAN BARU
+                    if (song.isOnline && song.onlineId != null) {
+                        var showShareDialog by remember { mutableStateOf(false) }
+
+                        IconButton(
+                            onClick = {
+                                showShareDialog = true
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Share,
+                                contentDescription = "Share Song",
+                                tint = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        // Show share options dialog
+                        if (showShareDialog) {
+                            val onlineSong = com.example.purrytify.models.OnlineSong(
+                                id = song.onlineId!!,
+                                title = song.title,
+                                artist = song.artist,
+                                artworkUrl = song.coverUrl,
+                                audioUrl = song.filePath,
+                                durationString = formatDuration(song.duration),
+                                country = "",
+                                rank = 0,
+                                createdAt = "",
+                                updatedAt = ""
+                            )
+
+                            ShareOptionsDialog(
+                                onlineSong = onlineSong,
+                                onDismiss = { showShareDialog = false }
+                            )
+                        }
                     }
 
                     // Like button

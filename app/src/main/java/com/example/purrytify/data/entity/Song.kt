@@ -34,5 +34,11 @@ data class Song(
     val addedAt: Long = System.currentTimeMillis(),
 
     @ColumnInfo(name = "user_id", defaultValue = "-1")
-    val userId: Int = -1
+    val userId: Int = -1,
+
+    @ColumnInfo(name = "is_online")
+    val isOnline: Boolean = false,
+
+    @ColumnInfo(name = "online_id")
+    val onlineId: Int? = null // Reference to the online song ID
 )

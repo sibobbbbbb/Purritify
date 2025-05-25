@@ -1,5 +1,7 @@
 package com.example.purrytify
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.Manifest
 import android.content.Intent
 import android.content.IntentFilter
@@ -56,6 +58,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.example.purrytify.util.SongDownloadManager
+import com.example.purrytify.util.NotificationPermissionHandler
 
 class MainActivity : ComponentActivity() {
     private val TAG = "MainActivity"
@@ -68,9 +72,26 @@ class MainActivity : ComponentActivity() {
     private val isInitialized = mutableStateOf(false)
     private lateinit var songCompletionReceiver: SongCompletionReceiver
     private lateinit var localBroadcastManager: LocalBroadcastManager
+    private lateinit var downloadManager: SongDownloadManager
+
+    // TAMBAHAN: Media Button Action Receiver
+    private lateinit var mediaButtonActionReceiver: BroadcastReceiver
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        handleIncomingIntent(intent)
+        // Inisialisasi NetworkConnectionObserver
+        networkConnectionObserver = NetworkConnectionObserver(applicationContext)
+        networkConnectionObserver.start()
+
+        tokenManager = (application as PurrytifyApp).tokenManager
+
+        // Initialize SongDownloadManager
+        downloadManager = SongDownloadManager(this)
+
+        // Request notification permission for Android 13+
+        NotificationPermissionHandler.requestNotificationPermission(this)
 
         // Lightweight initialization first
         lifecycleScope.launch(Dispatchers.Default) {
@@ -140,6 +161,7 @@ class MainActivity : ComponentActivity() {
                                     AppNavigation(
                                         navController = navController,
                                         networkConnectionObserver = networkConnectionObserver,
+                                        mainViewModel = mainViewModel // Tambahkan parameter ini
                                     )
                                 }
                             }
@@ -179,60 +201,190 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.let { handleIncomingIntent(it) }
+    }
+
+    private fun handleIncomingIntent(intent: Intent) {
+        // Handle deep link for online song
+        val playOnlineSongId = intent.getIntExtra("PLAY_ONLINE_SONG_ID", -1)
+        val showPlayer = intent.getBooleanExtra("SHOW_PLAYER", false)
+
+        if (playOnlineSongId != -1) {
+            val title = intent.getStringExtra("ONLINE_SONG_TITLE") ?: ""
+            val artist = intent.getStringExtra("ONLINE_SONG_ARTIST") ?: ""
+            val audioUrl = intent.getStringExtra("ONLINE_SONG_URL") ?: ""
+            val artworkUrl = intent.getStringExtra("ONLINE_SONG_ARTWORK") ?: ""
+
+            // Play the online song after initialization
+            lifecycleScope.launch {
+                // Wait for initialization to complete
+                while (!isInitialized.value) {
+                    kotlinx.coroutines.delay(100)
+                }
+
+                if (tokenManager.isLoggedIn()) {
+                    val onlineSong = com.example.purrytify.models.OnlineSong(
+                        id = playOnlineSongId,
+                        title = title,
+                        artist = artist,
+                        artworkUrl = artworkUrl,
+                        audioUrl = audioUrl,
+                        durationString = "0:00", // Default duration, will be updated when playing
+                        country = "",
+                        rank = 0,
+                        createdAt = "",
+                        updatedAt = ""
+                    )
+
+                    mainViewModel.playOnlineSong(onlineSong)
+
+                    if (showPlayer) {
+                        // Set a flag to show player screen
+                        // This would need to be implemented in the UI layer
+                    }
+                }
+            }
+        }
+
+        // Handle pending song ID after login
+        val pendingSongId = intent.getIntExtra("PENDING_SONG_ID", -1)
+        if (pendingSongId != -1 && tokenManager.isLoggedIn()) {
+            // Fetch and play the pending song
+            lifecycleScope.launch {
+                try {
+                    val response = com.example.purrytify.network.RetrofitClient.apiService.getSongById(pendingSongId)
+                    if (response.isSuccessful) {
+                        response.body()?.let { onlineSong ->
+                            mainViewModel.playOnlineSong(onlineSong)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error fetching pending song", e)
+                }
+            }
+        }
+    }
+
     private suspend fun initializeApp() {
         try {
             Log.d(TAG, "Starting app initialization")
 
             // Initialize lightweight components first
             withContext(Dispatchers.Main) {
-                tokenManager = (application as PurrytifyApp).tokenManager
-                songRepository = (application as PurrytifyApp).songRepository
-                networkConnectionObserver = (application as PurrytifyApp).networkConnectionObserver
-                localBroadcastManager = LocalBroadcastManager.getInstance(this@MainActivity)
+                try {
+                    tokenManager = (application as PurrytifyApp).tokenManager
+                    songRepository = (application as PurrytifyApp).songRepository
+                    networkConnectionObserver = (application as PurrytifyApp).networkConnectionObserver
+                    localBroadcastManager = LocalBroadcastManager.getInstance(this@MainActivity)
 
-                // Check login status (simple operation)
-                isLoggedIn.value = tokenManager.isLoggedIn()
+                    // Check login status (simple operation)
+                    isLoggedIn.value = tokenManager.isLoggedIn()
+                    Log.d(TAG, "Basic initialization completed")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in basic initialization", e)
+                    throw e
+                }
             }
 
             // Initialize network observer (non-blocking)
-            networkConnectionObserver.start()
+            try {
+                networkConnectionObserver.start()
+                Log.d(TAG, "Network observer started")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting network observer", e)
+            }
 
             // Initialize MainViewModel (potentially heavy)
             withContext(Dispatchers.Main) {
-                mainViewModel = ViewModelProvider(
-                    this@MainActivity,
-                    ViewModelFactory.getInstance(applicationContext)
-                )[MainViewModel::class.java]
+                try {
+                    mainViewModel = ViewModelProvider(
+                        this@MainActivity,
+                        ViewModelFactory.getInstance(applicationContext)
+                    )[MainViewModel::class.java]
+                    Log.d(TAG, "MainViewModel initialized")
 
-                // Bind media player service
-                mainViewModel.bindService(this@MainActivity)
+                    // Bind media player service
+                    mainViewModel.bindService(this@MainActivity)
+                    Log.d(TAG, "Media player service bound")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error initializing MainViewModel", e)
+                    throw e
+                }
             }
 
-            // Initialize broadcast receiver for song completion
+            // Initialize broadcast receivers - FIXED FOR ANDROID 14+
             withContext(Dispatchers.Main) {
-                songCompletionReceiver = SongCompletionReceiver(mainViewModel)
-                localBroadcastManager.registerReceiver(
-                    songCompletionReceiver,
-                    IntentFilter("com.example.purrytify.SONG_COMPLETED")
-                )
+                try {
+                    songCompletionReceiver = SongCompletionReceiver(mainViewModel)
+                    localBroadcastManager.registerReceiver(
+                        songCompletionReceiver,
+                        IntentFilter("com.example.purrytify.SONG_COMPLETED")
+                    )
+                    Log.d(TAG, "Song completion receiver registered")
+
+                    // Register media button action receiver - LOCAL BROADCAST ONLY
+                    mediaButtonActionReceiver = object : BroadcastReceiver() {
+                        override fun onReceive(context: Context?, intent: Intent?) {
+                            try {
+                                if (intent?.action == "com.example.purrytify.MEDIA_BUTTON_ACTION") {
+                                    val action = intent.getStringExtra("action")
+                                    Log.d(TAG, "Received media button action: $action")
+
+                                    when (action) {
+                                        "NEXT" -> mainViewModel.playNext()
+                                        "PREVIOUS" -> mainViewModel.playPrevious()
+                                        "STOP" -> mainViewModel.stopPlayback()
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error handling media button action", e)
+                            }
+                        }
+                    }
+
+                    // Use LocalBroadcastManager only (no exported/not exported needed)
+                    localBroadcastManager.registerReceiver(
+                        mediaButtonActionReceiver,
+                        IntentFilter("com.example.purrytify.MEDIA_BUTTON_ACTION")
+                    )
+                    Log.d(TAG, "Media button receiver registered")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error registering receivers", e)
+                    throw e
+                }
             }
 
             // Setup EventBus listeners
-            setupEventBusListeners()
+            try {
+                setupEventBusListeners()
+                Log.d(TAG, "EventBus listeners setup")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting up EventBus listeners", e)
+            }
 
             // Only start token service if user is logged in
             if (isLoggedIn.value) {
-                startTokenRefreshService()
+                try {
+                    startTokenRefreshService()
+                    Log.d(TAG, "Token refresh service started")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error starting token service", e)
+                }
             }
 
             // Mark initialization as complete
             isInitialized.value = true
-            Log.d(TAG, "App initialization completed")
+            Log.d(TAG, "App initialization completed successfully")
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error during initialization: ${e.message}")
+            Log.e(TAG, "Critical error during initialization: ${e.message}", e)
             // Even on error, we need to mark as initialized to show login screen
             isInitialized.value = true
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@MainActivity, "Initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -284,18 +436,49 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // TAMBAHAN: Handle permission result
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        NotificationPermissionHandler.handlePermissionResult(
+            requestCode, permissions, grantResults,
+            onGranted = {
+                Log.d(TAG, "Notification permission granted")
+            },
+            onDenied = {
+                Toast.makeText(this, "Notification permission required for media controls", Toast.LENGTH_LONG).show()
+            }
+        )
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         // Unregister the broadcast receiver using LocalBroadcastManager
         try {
             localBroadcastManager.unregisterReceiver(songCompletionReceiver)
         } catch (e: Exception) {
-            Log.e(TAG, "Error unregistering receiver: ${e.message}")
+            Log.e(TAG, "Error unregistering song completion receiver: ${e.message}")
+        }
+
+        // TAMBAHAN: Unregister media button action receiver
+        try {
+            localBroadcastManager.unregisterReceiver(mediaButtonActionReceiver)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error unregistering media button receiver: ${e.message}")
         }
 
         networkConnectionObserver.stop()
         stopTokenRefreshService()
         mainViewModel.unbindService(this)
+
+        // Release download manager resources
+        if (::downloadManager.isInitialized) {
+            downloadManager.release()
+        }
     }
 
     private fun startTokenRefreshService() {

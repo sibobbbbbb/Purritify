@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.purrytify.data.entity.Song as EntitySong
 import com.example.purrytify.data.repository.SongRepository
+import com.example.purrytify.models.OnlineSong
 import com.example.purrytify.models.Song
 import com.example.purrytify.service.MediaPlayerService
 import com.example.purrytify.util.SongMapper
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+
 
 class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
     private val TAG = "MainViewModel"
@@ -109,6 +111,28 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
                 }
             }
 
+            viewModelScope.launch {
+                mediaPlayerService?.currentSong?.collect { serviceSong ->
+                    Log.d(TAG, "Received song from service: ${serviceSong?.title}")
+
+                    if (serviceSong != null) {
+                        val currentViewModelSong = _currentSong.value
+
+                        val finalSong = if (currentViewModelSong?.isOnline == true) {
+                            serviceSong.copy(
+                                isOnline = true,
+                                onlineId = currentViewModelSong.onlineId
+                            )
+                        } else {
+                            serviceSong
+                        }
+
+                        Log.d(TAG, "Final song - isOnline: ${finalSong.isOnline}, onlineId: ${finalSong.onlineId}")
+                        _currentSong.value = finalSong
+                    }
+                }
+            }
+
             // If we already have a song to play when service connects, play it
             _currentSong.value?.let { song ->
                 if (_isPlaying.value) {
@@ -180,13 +204,14 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
         }
     }
 
+    // PERBAIKAN: Unified playSong method for both online and offline songs
     fun playSong(song: Song) {
-        Log.d(TAG, "Playing song: ${song.title}")
+        Log.d(TAG, "Playing song: ${song.title}, isOnline: ${song.isOnline}")
 
         // Reset history when manually selecting a song
         _playHistory.value = emptyList()
 
-        // Play the song using media player service
+        // PERBAIKAN: Always use the unified playSong method
         mediaPlayerService?.playSong(song)
 
         // Update current song state
@@ -194,14 +219,18 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
         _isPlaying.value = true
 
         viewModelScope.launch {
-            // Ubah cara penanganan queue
-            // Buat queue baru yang hanya berisi lagu ini
+            // Update queue
             _queue.value = listOf(song)
             _currentQueueIndex.value = 0
 
-            // Update song's last played timestamp
-            Log.d(TAG, "Updating last played timestamp for song ${song.id}")
-            songRepository.updateLastPlayed(song.id)
+            // PERBAIKAN: Only update last played for offline songs
+            // Online songs don't need to update database timestamp
+            if (!song.isOnline && song.id > 0) {
+                Log.d(TAG, "Updating last played timestamp for offline song ${song.id}")
+                songRepository.updateLastPlayed(song.id)
+            } else {
+                Log.d(TAG, "Skipping last played update for online song: ${song.title}")
+            }
         }
     }
 
@@ -471,6 +500,71 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
                 stopCurrentPlayback()
             }
         }
+    }
+
+    fun playOnlineSong(onlineSong: OnlineSong) {
+        viewModelScope.launch {
+            Log.d(TAG, "=== MAIN VIEW MODEL PLAYING ONLINE SONG ===")
+            Log.d(TAG, "OnlineSong ID: ${onlineSong.id}")
+            Log.d(TAG, "OnlineSong Title: ${onlineSong.title}")
+            Log.d(TAG, "OnlineSong Artist: ${onlineSong.artist}")
+
+            try {
+                // Convert OnlineSong to Song model for internal use
+                val song = Song(
+                    id = System.currentTimeMillis(),
+                    title = onlineSong.title,
+                    artist = onlineSong.artist,
+                    coverUrl = onlineSong.artworkUrl,
+                    filePath = onlineSong.audioUrl,
+                    duration = onlineSong.getDurationInMillis(),
+                    isPlaying = false,
+                    isLiked = false,
+                    isOnline = true,
+                    onlineId = onlineSong.id,
+                    lastPlayed = System.currentTimeMillis(),
+                    addedAt = System.currentTimeMillis(),
+                    userId = -1
+                )
+
+                Log.d(TAG, "Created Song object:")
+                Log.d(TAG, "  - isOnline: ${song.isOnline}")
+                Log.d(TAG, "  - onlineId: ${song.onlineId}")
+                Log.d(TAG, "  - title: ${song.title}")
+
+                _currentSong.value = song
+                _isPlaying.value = false // Will be set to true by service
+
+                // Create a new queue with just this song
+                _queue.value = listOf(song)
+                _currentQueueIndex.value = 0
+
+                Log.d(TAG, "State set in ViewModel - currentSong isOnline: ${_currentSong.value?.isOnline}")
+
+                if (mediaPlayerService != null) {
+                    mediaPlayerService?.playOnlineSongWithId(
+                        audioUrl = onlineSong.audioUrl,
+                        title = onlineSong.title,
+                        artist = onlineSong.artist,
+                        coverUrl = onlineSong.artworkUrl,
+                        onlineId = onlineSong.id
+                    )
+
+                    Log.d(TAG, "Called MediaPlayerService.playOnlineSongWithId")
+                } else {
+                    Log.e(TAG, "MediaPlayerService is not available")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error playing online song", e)
+            }
+        }
+    }
+
+    private fun preserveOnlineProperties(updatedSong: Song, originalSong: Song): Song {
+        return updatedSong.copy(
+            isOnline = originalSong.isOnline,
+            onlineId = originalSong.onlineId
+        )
     }
 
     // Helper method to stop current playback
@@ -1101,5 +1195,27 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
 
         // Stop playback
         mediaPlayerService?.stopPlayback()
+    }
+
+    fun stopPlayback() {
+        Log.d(TAG, "Stop playback requested from notification")
+
+        // Stop the media player service
+        mediaPlayerService?.stopPlayback()
+
+        // Update UI state
+        _isPlaying.value = false
+        _currentSong.value = null
+
+        // Clear queue and reset state
+        _queue.value = emptyList()
+        _playHistory.value = emptyList()
+        _currentQueueIndex.value = -1
+
+        // Reset position and duration
+        _currentPosition.value = 0
+        _duration.value = 0
+
+        Log.d(TAG, "Playback stopped and state cleared")
     }
 }

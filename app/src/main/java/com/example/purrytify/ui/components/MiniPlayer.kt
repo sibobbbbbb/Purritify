@@ -32,7 +32,11 @@ import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.purrytify.R
-import com.example.purrytify.ui.components.AudioDeviceIndicatorMini
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValueimport com.example.purrytify.ui.components.AudioDeviceIndicatorMini
 
 
 @Composable
@@ -43,6 +47,8 @@ fun MiniPlayer(
     onPlayerClick: () -> Unit,
     onAudioDeviceClick: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
+
     if (currentSong != null) {
         Row(
             modifier = Modifier
@@ -58,7 +64,7 @@ fun MiniPlayer(
             if (currentSong.coverUrl.isNotEmpty()) {
                 // Ideal: Use Coil or Glide untuk loading image dari file path
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
+                    model = ImageRequest.Builder(context)
                         .data(currentSong.coverUrl)
                         .crossfade(true)
                         .build(),
@@ -100,6 +106,50 @@ fun MiniPlayer(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+
+            // ✅ PERBAIKAN: Share button with proper state management
+            if (currentSong.isOnline && currentSong.onlineId != null) {
+                var showShareDialog by remember { mutableStateOf(false) }
+
+                IconButton(onClick = {
+                    showShareDialog = true
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.Share,
+                        contentDescription = "Share",
+                        tint = Color.White
+                    )
+                }
+
+                // Show share options dialog
+                if (showShareDialog) {
+                    // Helper function to convert milliseconds to mm:ss format
+                    fun formatDurationFromMs(durationMs: Long): String {
+                        val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes(durationMs)
+                        val seconds = java.util.concurrent.TimeUnit.MILLISECONDS.toSeconds(durationMs) -
+                                java.util.concurrent.TimeUnit.MINUTES.toSeconds(minutes)
+                        return String.format("%d:%02d", minutes, seconds)
+                    }
+
+                    val onlineSong = com.example.purrytify.models.OnlineSong(
+                        id = currentSong.onlineId!!,
+                        title = currentSong.title,
+                        artist = currentSong.artist,
+                        artworkUrl = currentSong.coverUrl,
+                        audioUrl = currentSong.filePath,
+                        durationString = formatDurationFromMs(currentSong.duration),
+                        country = "",
+                        rank = 0,
+                        createdAt = "",
+                        updatedAt = ""
+                    )
+
+                    ShareOptionsDialog(
+                        onlineSong = onlineSong,
+                        onDismiss = { showShareDialog = false }
+                    )
+                }
             }
 
             // Play/Pause Button

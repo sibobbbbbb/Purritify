@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData
 import androidx.room.*
 import com.example.purrytify.data.entity.Song
 
+
 @Dao
 interface SongDao {
     @Query("SELECT * FROM songs ORDER BY added_at DESC")
@@ -77,4 +78,41 @@ interface SongDao {
 
     @Query("SELECT COUNT(*) FROM songs WHERE user_id = :userId AND last_played IS NOT NULL")
     fun countListenedSongsForUser(userId: Int): Int
+
+
+
+    @Query("SELECT * FROM songs WHERE is_online = 1 AND user_id = :userId ORDER BY added_at DESC")
+    fun getDownloadedOnlineSongs(userId: Int): List<Song>
+
+
+    @Query("SELECT * FROM songs WHERE online_id = :onlineId LIMIT 1")
+    fun getSongByOnlineId(onlineId: Int): Song?
+
+
+    // Add these methods to the existing SongDao interface:
+
+    @Query("SELECT * FROM songs WHERE online_id = :onlineId AND user_id = :userId LIMIT 1")
+    fun getDownloadedSongByOnlineId(onlineId: Int, userId: Int): Song?
+
+    @Query("SELECT * FROM songs WHERE is_online = 1 AND user_id = :userId ORDER BY added_at DESC")
+    fun getDownloadedOnlineSongsByUserId(userId: Int): LiveData<List<Song>>
+
+    @Query("SELECT * FROM songs WHERE is_online = 1 ORDER BY added_at DESC")
+    fun getDownloadedOnlineSongs(): LiveData<List<Song>>
+
+    @Query("SELECT COUNT(*) FROM songs WHERE online_id = :onlineId")
+    fun getCountByOnlineId(onlineId: Int): Int
+
+    @Query("SELECT * FROM songs WHERE is_online = 1")
+    fun getDownloadedOnlineSongsSync(): List<Song>
+
+    @Query("SELECT * FROM songs ORDER BY added_at DESC")
+    fun getAllSongsSync(): List<Song>
+
+    @Query("SELECT * FROM songs WHERE user_id = :userId ORDER BY added_at DESC")
+    fun getSongsByUserIdSync(userId: Int): List<Song>
+
+    @Query("SELECT COUNT(*) FROM songs WHERE is_online = 1")
+    fun countOnlineSongs(): Int
+
 }

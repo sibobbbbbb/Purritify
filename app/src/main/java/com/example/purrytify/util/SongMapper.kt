@@ -14,16 +14,21 @@ object SongMapper {
      * @param isPlaying Status apakah lagu sedang diputar
      * @return Model Song untuk UI
      */
-    fun fromEntity(entity: EntitySong, isPlaying: Boolean = false): ModelSong {
-        return ModelSong(
+    fun fromEntity(entity: com.example.purrytify.data.entity.Song, isPlaying: Boolean = false): com.example.purrytify.models.Song {
+        return com.example.purrytify.models.Song(
             id = entity.id,
             title = entity.title,
             artist = entity.artist,
-            coverUrl = entity.artworkPath, // Menggunakan artwork path sebagai URL cover
+            coverUrl = entity.artworkPath,
             filePath = entity.filePath,
             duration = entity.duration,
             isPlaying = isPlaying,
-            isLiked = entity.isLiked
+            isLiked = entity.isLiked,
+            isOnline = entity.isOnline,
+            onlineId = entity.onlineId,
+            lastPlayed = entity.lastPlayed,
+            addedAt = entity.addedAt,
+            userId = entity.userId
         )
     }
 
@@ -32,8 +37,8 @@ object SongMapper {
      * @param model Model Song dari UI
      * @return Entity Song untuk database
      */
-    fun toEntity(model: ModelSong): EntitySong {
-        return EntitySong(
+    fun toEntity(model: com.example.purrytify.models.Song): com.example.purrytify.data.entity.Song {
+        return com.example.purrytify.data.entity.Song(
             id = model.id,
             title = model.title,
             artist = model.artist,
@@ -41,7 +46,11 @@ object SongMapper {
             filePath = model.filePath,
             duration = model.duration,
             isLiked = model.isLiked,
-            lastPlayed = if (model.isPlaying) System.currentTimeMillis() else null
+            lastPlayed = model.lastPlayed,
+            addedAt = model.addedAt,
+            userId = model.userId,
+            isOnline = model.isOnline,
+            onlineId = model.onlineId
         )
     }
 

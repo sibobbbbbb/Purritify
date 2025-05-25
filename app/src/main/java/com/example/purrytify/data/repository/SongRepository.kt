@@ -55,6 +55,28 @@ class SongRepository(private val songDao: SongDao) {
         }
     }
 
+    suspend fun getTotalSongCount(): Int {
+        return withContext(Dispatchers.IO) {
+            songDao.countAllSongs()
+        }
+    }
+
+    suspend fun getOnlineSongCount(): Int {
+        return withContext(Dispatchers.IO) {
+            songDao.countOnlineSongs()
+        }
+    }
+
+    suspend fun getAllSongsSync(): List<Song> {
+        return withContext(Dispatchers.IO) {
+            if (currentUserId > 0) {
+                songDao.getSongsByUserIdSync(currentUserId)
+            } else {
+                songDao.getAllSongsSync()
+            }
+        }
+    }
+
     // Update a song
     suspend fun update(song: Song): Int {
         return withContext(Dispatchers.IO) {

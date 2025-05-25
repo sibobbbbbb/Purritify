@@ -2,12 +2,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools" >
 
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
 
     <!-- Location permissions for edit profile -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -53,6 +64,30 @@
         </activity>
 
         <activity
+            android:name=".DeepLinkActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Purrytify"
+            android:launchMode="singleTop">
+
+            <!-- Intent filter untuk custom scheme (tanpa autoVerify) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="purrytify" />
+            </intent-filter>
+
+            <!-- Intent filter khusus untuk song deep links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="purrytify"
+                    android:host="song" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name=".QueueScreenActivity"
             android:exported="false"
             android:theme="@style/Theme.Purrytify" />
@@ -63,6 +98,36 @@
             android:enabled="true"
             android:exported="false" />
 
+
+        <!-- Media Button Receiver -->
+        <receiver android:name=".receivers.MediaButtonReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.purrytify.PLAY_PAUSE" />
+                <action android:name="com.example.purrytify.NEXT" />
+                <action android:name="com.example.purrytify.PREVIOUS" />
+                <action android:name="com.example.purrytify.STOP" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Update MediaPlayerService declaration -->
+        <service android:name=".service.MediaPlayerService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <service
             android:name=".service.MediaPlayerService"
             android:enabled="true"
@@ -78,5 +143,9 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_provider_paths" />
         </provider>
+
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyDNMbD-13cjo0Cbdj8EWjP3DyxBenupkbY" />
     </application>
 </manifest>

@@ -28,13 +28,6 @@ import java.util.UUID
 
 /**
  * Manager class untuk mengelola deteksi, koneksi, dan switching perangkat audio
- *
- * Alur kerja:
- * 1. Inisialisasi dengan context
- * 2. Register broadcast receivers untuk mendeteksi perubahan perangkat
- * 3. Scan perangkat yang tersedia (wired, bluetooth)
- * 4. Emit perubahan melalui Flow
- * 5. Handle koneksi/diskoneksi perangkat
  */
 class AudioDeviceManager(private val context: Context) {
     private val TAG = "AudioDeviceManager"
@@ -131,12 +124,6 @@ class AudioDeviceManager(private val context: Context) {
 
     /**
      * Mendapatkan semua perangkat audio yang tersedia
-     *
-     * Alur:
-     * 1. Selalu tambahkan internal speaker sebagai fallback
-     * 2. Check wired headset
-     * 3. Check Bluetooth devices (paired dan connected)
-     * 4. Tentukan device mana yang aktif
      */
     private fun getAvailableDevices(): List<AudioDevice> {
         val devices = mutableListOf<AudioDevice>()
@@ -204,12 +191,6 @@ class AudioDeviceManager(private val context: Context) {
 
     /**
      * Mendapatkan daftar Bluetooth devices
-     *
-     * Alur:
-     * 1. Check permission
-     * 2. Get bonded (paired) devices
-     * 3. Check connection state untuk setiap device
-     * 4. Filter hanya audio devices
      */
     private fun getBluetoothDevices(): List<AudioDevice> {
         val devices = mutableListOf<AudioDevice>()

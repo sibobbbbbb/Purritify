@@ -17,13 +17,8 @@ import kotlinx.coroutines.launch
 class HomeViewModel(private val songRepository: SongRepository) : ViewModel() {
     private val TAG = "HomeViewModel"
 
-    // ID lagu yang sedang diputar
-    private val _playingSongId = MutableStateFlow<Long>(-1)
-    val playingSongId: StateFlow<Long> = _playingSongId
-
-    // State untuk playing status
-    private val _isPlaying = MutableStateFlow(false)
-    val isPlaying: StateFlow<Boolean> = _isPlaying
+    // PERBAIKAN: Hapus state management untuk current song dan playing status
+    // Biarkan MainViewModel yang mengelola state ini
 
     // LiveData untuk model UI
     private val _allSongs = MutableLiveData<List<Song>>(emptyList())
@@ -69,61 +64,15 @@ class HomeViewModel(private val songRepository: SongRepository) : ViewModel() {
     }
 
     private fun convertToModelSongs(entityList: List<EntitySong>): List<Song> {
+        // PERBAIKAN: Tidak lagi mencoba mengelola playing status di sini
+        // Biarkan MainViewModel yang menangani status playing
         return entityList.map { entity ->
-            SongMapper.fromEntity(entity, entity.id == _playingSongId.value)
+            SongMapper.fromEntity(entity, false) // Always set playing to false
         }
     }
 
-    /**
-     * Memutar lagu yang dipilih
-     * @param song Lagu yang akan diputar
-     */
-    fun playSong(song: Song) {
-        Log.d(TAG, "Playing song: ${song.title}")
-        _playingSongId.value = song.id
-        _isPlaying.value = true
-
-        // Update timestamp lagu terakhir diputar
-        viewModelScope.launch {
-            try {
-                songRepository.updateLastPlayed(song.id)
-
-                // Update UI dengan status playing yang baru
-                updateSongPlayingStatus()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error updating last played timestamp", e)
-            }
-        }
-    }
-
-    /**
-     * Update status playing pada semua lagu
-     */
-    private fun updateSongPlayingStatus() {
-        val currentPlayingSongId = _playingSongId.value
-
-        // Update allSongs
-        _allSongs.value = _allSongs.value?.map { song ->
-            song.copy(isPlaying = song.id == currentPlayingSongId)
-        }
-
-        // Update recentlyPlayed
-        _recentlyPlayed.value = _recentlyPlayed.value?.map { song ->
-            song.copy(isPlaying = song.id == currentPlayingSongId)
-        }
-
-        // Update newSongs
-        _newSongs.value = _newSongs.value?.map { song ->
-            song.copy(isPlaying = song.id == currentPlayingSongId)
-        }
-    }
-
-    /**
-     * Toggle playback status
-     */
-    fun togglePlayPause() {
-        _isPlaying.value = !_isPlaying.value
-    }
+    // PERBAIKAN: Hapus fungsi playSong dari HomeViewModel
+    // Biarkan MainViewModel yang mengelola pemutaran lagu
 
     /**
      * Toggle status like lagu
@@ -136,6 +85,21 @@ class HomeViewModel(private val songRepository: SongRepository) : ViewModel() {
                 songRepository.toggleLike(songId, isLiked)
             } catch (e: Exception) {
                 Log.e(TAG, "Error toggling like status", e)
+            }
+        }
+    }
+
+    /**
+     * Update last played timestamp untuk lagu tertentu
+     * Fungsi ini bisa dipanggil dari luar untuk update database
+     */
+    fun updateLastPlayed(songId: Long) {
+        viewModelScope.launch {
+            try {
+                songRepository.updateLastPlayed(songId)
+                Log.d(TAG, "Updated last played for song $songId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error updating last played timestamp", e)
             }
         }
     }

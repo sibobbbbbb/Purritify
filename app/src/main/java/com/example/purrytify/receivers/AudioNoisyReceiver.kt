@@ -9,11 +9,6 @@ import android.util.Log
 /**
  * BroadcastReceiver untuk mendeteksi saat audio menjadi "noisy"
  * (headphone dicabut, bluetooth disconnect)
- *
- * Alur kerja:
- * 1. System broadcast ACTION_AUDIO_BECOMING_NOISY saat output akan pindah ke speaker
- * 2. Receiver pause playback untuk avoid sudden loud playback
- * 3. Optional: Show notification bahwa playback di-pause
  */
 class AudioNoisyReceiver(
     private val onAudioBecomingNoisy: () -> Unit

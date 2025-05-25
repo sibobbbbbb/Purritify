@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.purrytify.data.entity.Song as EntitySong
 import com.example.purrytify.data.repository.SongRepository
 import com.example.purrytify.models.Song
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,13 +21,8 @@ class LibraryViewModel(private val repository: SongRepository) : ViewModel() {
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
     val songs: StateFlow<List<Song>> = _songs.asStateFlow()
 
-    // StateFlow untuk lagu yang sedang diputar
-    private val _currentSong = MutableStateFlow<Song?>(null)
-    val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
-
-    // Status pemutaran
-    private val _isPlaying = MutableStateFlow(false)
-    val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+    // PERBAIKAN: Hapus state management untuk current song dan playing status
+    // Biarkan MainViewModel yang mengelola state ini secara terpusat
 
     // Status for operations
     private val _operationStatus = MutableStateFlow<OperationStatus?>(null)
@@ -35,6 +31,7 @@ class LibraryViewModel(private val repository: SongRepository) : ViewModel() {
     init {
         viewModelScope.launch {
             repository.allSongs.asFlow().collect { dbSongs ->
+                Log.d(TAG, "Collected ${dbSongs.size} songs from repository")
                 _songs.value = dbSongs.map { dbSong ->
                     Song(
                         id = dbSong.id,
@@ -44,26 +41,40 @@ class LibraryViewModel(private val repository: SongRepository) : ViewModel() {
                         filePath = dbSong.filePath,
                         duration = dbSong.duration,
                         isLiked = dbSong.isLiked,
-                        isPlaying = false
+                        isPlaying = false, // PERBAIKAN: Always false, let MainViewModel handle this
+                        isOnline = dbSong.isOnline,
+                        onlineId = dbSong.onlineId
                     )
                 }
             }
         }
     }
 
-    fun playSong(song: Song) {
-        _currentSong.value = song
-        _isPlaying.value = true
-
-        // Update last played timestamp in database
-        viewModelScope.launch {
-            repository.updateLastPlayed(song.id)
-        }
-    }
+    // PERBAIKAN: Hapus fungsi playSong dari LibraryViewModel
+    // MainViewModel akan mengelola semua playback state
 
     fun toggleLike(song: Song) {
         viewModelScope.launch {
             repository.toggleLike(song.id, !song.isLiked)
+        }
+    }
+
+    fun debugDatabaseContent() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val totalCount = repository.getTotalSongCount()
+                val onlineCount = repository.getOnlineSongCount()
+                Log.d(TAG, "DEBUG: Database contains $totalCount total songs, $onlineCount online songs")
+
+                // Get all songs and log their details
+                val allSongs = repository.getAllSongsSync()
+                Log.d(TAG, "DEBUG: All songs in database (${allSongs.size}):")
+                allSongs.forEach { song ->
+                    Log.d(TAG, "DEBUG: Song[id=${song.id}, title=${song.title}, isOnline=${song.isOnline}, onlineId=${song.onlineId}]")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error debugging database content", e)
+            }
         }
     }
 
@@ -203,9 +214,8 @@ class LibraryViewModel(private val repository: SongRepository) : ViewModel() {
         _operationStatus.value = null
     }
 
-    fun setIsPlaying(playing: Boolean) {
-        _isPlaying.value = playing
-    }
+    // PERBAIKAN: Hapus fungsi setIsPlaying karena tidak diperlukan lagi
+    // MainViewModel mengelola semua state playing
 }
 
 // Data class for operation status
