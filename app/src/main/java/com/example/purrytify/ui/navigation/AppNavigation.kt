@@ -17,7 +17,9 @@ import com.example.purrytify.ui.screens.QRScannerScreen
 import com.example.purrytify.ui.screens.QueueScreen
 import com.example.purrytify.ui.screens.EditProfileScreen
 import com.example.purrytify.util.NetworkConnectionObserver
-import com.example.purrytify.util.toSong
+import com.example.purrytify.ui.components.NoInternetScreen
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.example.purrytify.ui.screens.AudioDeviceScreen
 import com.example.purrytify.viewmodels.MainViewModel
 
@@ -39,6 +41,7 @@ fun AppNavigation(
     mainViewModel: MainViewModel,
     networkConnectionObserver: NetworkConnectionObserver
 ) {
+    val isConnected by networkConnectionObserver.isConnected.collectAsState()
 
     val context = LocalContext.current
 

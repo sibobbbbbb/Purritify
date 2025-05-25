@@ -1,6 +1,5 @@
 package com.example.purrytify.ui.screens
 
-import androidx.activity.ComponentActivity
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -69,6 +68,7 @@ import java.util.concurrent.TimeUnit
 import androidx.activity.ComponentActivity
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.runtime.setValue
 import com.example.purrytify.ui.components.ShareOptionsDialog
 import com.example.purrytify.ui.components.AudioDeviceIndicator
 

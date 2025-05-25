@@ -436,25 +436,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // TAMBAHAN: Handle permission result
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        NotificationPermissionHandler.handlePermissionResult(
-            requestCode, permissions, grantResults,
-            onGranted = {
-                Log.d(TAG, "Notification permission granted")
-            },
-            onDenied = {
-                Toast.makeText(this, "Notification permission required for media controls", Toast.LENGTH_LONG).show()
-            }
-        )
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         // Unregister the broadcast receiver using LocalBroadcastManager
@@ -577,5 +558,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        NotificationPermissionHandler.handlePermissionResult(
+            requestCode, permissions, grantResults,
+            onGranted = {
+                Log.d(TAG, "Notification permission granted")
+            },
+            onDenied = {
+                Toast.makeText(this, "Notification permission required for media controls", Toast.LENGTH_LONG).show()
+            }
+        )
     }
 }
