@@ -22,9 +22,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import com.example.purrytify.data.repository.AnalyticsRepository
+import com.example.purrytify.service.AnalyticsService
+import com.example.purrytify.util.TokenManager
 
 
-class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
+class MainViewModel(private val songRepository: SongRepository, private val analyticsRepository: AnalyticsRepository, private val tokenManager: TokenManager) : ViewModel() {
     private val TAG = "MainViewModel"
     private var mediaPlayerService: MediaPlayerService? = null
     private var bound = false
@@ -66,12 +69,21 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
     private val _shuffleEnabled = MutableStateFlow(false)
     val shuffleEnabled: StateFlow<Boolean> = _shuffleEnabled
 
+    // Analytics-related state flows
+    private val _currentMonthListeningTime = MutableStateFlow(0L)
+    val currentMonthListeningTime: StateFlow<Long> = _currentMonthListeningTime
+
+    private val _monthlyAnalytics = MutableStateFlow<AnalyticsRepository.MonthlyStatsSummary?>(null)
+    val monthlyAnalytics: StateFlow<AnalyticsRepository.MonthlyStatsSummary?> = _monthlyAnalytics
+
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             Log.d(TAG, "Service connected")
             val binder = service as MediaPlayerService.MediaPlayerBinder
             mediaPlayerService = binder.getService()
             bound = true
+
+            initializeAnalyticsTracking()
 
             // Collect data from service
             viewModelScope.launch {
@@ -133,6 +145,12 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
                 }
             }
 
+            viewModelScope.launch {
+                mediaPlayerService?.getAnalyticsService()?.getCurrentMonthListeningTime()?.collect { time ->
+                    _currentMonthListeningTime.value = time
+                }
+            }
+
             // If we already have a song to play when service connects, play it
             _currentSong.value?.let { song ->
                 if (_isPlaying.value) {
@@ -146,6 +164,224 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
             mediaPlayerService = null
             bound = false
         }
+    }
+
+    private fun initializeAnalyticsTracking() {
+        viewModelScope.launch {
+            try {
+                // Get current user ID from token manager
+                val userId = getCurrentUserId()
+                if (userId > 0) {
+                    mediaPlayerService?.initializeAnalyticsForUser(userId)
+
+                    // Load initial analytics data
+                    loadCurrentMonthAnalytics(userId)
+
+                    Log.d(TAG, "Analytics tracking initialized for user: $userId")
+                } else {
+                    Log.w(TAG, "No valid user ID for analytics initialization")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing analytics tracking", e)
+            }
+        }
+    }
+
+    private fun getCurrentUserId(): Long {
+        return try {
+            // Get user ID from TokenManager
+            tokenManager.getUserId().toLong()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting current user ID", e)
+            -1L
+        }
+    }
+
+    // Load current month analytics
+    private fun loadCurrentMonthAnalytics(userId: Long) {
+        viewModelScope.launch {
+            try {
+                val summary = analyticsRepository.getCurrentMonthSummary(userId)
+                _monthlyAnalytics.value = summary
+                Log.d(TAG, "Loaded monthly analytics summary")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading monthly analytics", e)
+            }
+        }
+    }
+
+    // Analytics-related methods for UI
+
+    /**
+     * Get top artists for current month
+     */
+    suspend fun getCurrentMonthTopArtists(limit: Int = 5): List<com.example.purrytify.data.dao.AnalyticsDao.ArtistStats> {
+        return try {
+            val userId = getCurrentUserId()
+            if (userId > 0) {
+                analyticsRepository.getCurrentMonthTopArtists(userId, limit)
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting top artists", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Get top songs for current month
+     */
+    suspend fun getCurrentMonthTopSongs(limit: Int = 5): List<com.example.purrytify.data.dao.AnalyticsDao.SongStats> {
+        return try {
+            val userId = getCurrentUserId()
+            if (userId > 0) {
+                analyticsRepository.getCurrentMonthTopSongs(userId, limit)
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting top songs", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Get active song streaks
+     */
+    suspend fun getActiveStreaks(): List<com.example.purrytify.data.entity.SongStreak> {
+        return try {
+            val userId = getCurrentUserId()
+            if (userId > 0) {
+                analyticsRepository.getActiveStreaks(userId)
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting active streaks", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Get available months with analytics data
+     */
+    suspend fun getAvailableAnalyticsMonths(): List<String> {
+        return try {
+            val userId = getCurrentUserId()
+            if (userId > 0) {
+                analyticsRepository.getAvailableMonths(userId)
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting available months", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Get analytics for a specific month
+     */
+    suspend fun getMonthlyAnalytics(month: String): AnalyticsRepository.MonthlyStatsSummary? {
+        return try {
+            val userId = getCurrentUserId()
+            if (userId > 0) {
+                val analytics = analyticsRepository.getMonthlyAnalytics(userId, month)
+                val topArtists = analyticsRepository.getTopArtists(userId, month, 1)
+                val topSongs = analyticsRepository.getTopSongs(userId, month, 1)
+                val activeStreaks = analyticsRepository.getActiveStreaks(userId)
+
+                AnalyticsRepository.MonthlyStatsSummary(
+                    totalListeningTime = analytics?.totalListeningTime ?: 0L,
+                    topArtist = topArtists.firstOrNull()?.artistName,
+                    topSong = topSongs.firstOrNull()?.songTitle,
+                    activeStreaksCount = activeStreaks.size,
+                    totalSongs = analytics?.uniqueSongsCount ?: 0,
+                    totalArtists = analytics?.uniqueArtistsCount ?: 0
+                )
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting monthly analytics", e)
+            null
+        }
+    }
+
+    /**
+     * Export analytics to CSV
+     */
+    fun exportAnalyticsCSV(context: Context, month: String) {
+        viewModelScope.launch {
+            try {
+                val userId = getCurrentUserId()
+                if (userId > 0) {
+                    val exporter = com.example.purrytify.util.AnalyticsExporter(context, analyticsRepository)
+                    exporter.exportToCSV(userId, month)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error exporting analytics", e)
+            }
+        }
+    }
+
+    /**
+     * Share analytics via share sheet
+     */
+    fun shareAnalytics(context: Context, month: String) {
+        viewModelScope.launch {
+            try {
+                val userId = getCurrentUserId()
+                if (userId > 0) {
+                    val exporter = com.example.purrytify.util.AnalyticsExporter(context, analyticsRepository)
+                    exporter.shareAnalytics(userId, month)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sharing analytics", e)
+            }
+        }
+    }
+
+    /**
+     * Refresh analytics data
+     */
+    fun refreshAnalytics() {
+        viewModelScope.launch {
+            try {
+                val userId = getCurrentUserId()
+                if (userId > 0) {
+                    loadCurrentMonthAnalytics(userId)
+                    Log.d(TAG, "Analytics data refreshed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error refreshing analytics", e)
+            }
+        }
+    }
+
+    /**
+     * Check if user has analytics data
+     */
+    suspend fun hasAnalyticsData(): Boolean {
+        return try {
+            val userId = getCurrentUserId()
+            if (userId > 0) {
+                analyticsRepository.hasAnalyticsData(userId)
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking analytics data", e)
+            false
+        }
+    }
+
+    /**
+     * Format listening time for display
+     */
+    fun formatListeningTime(timeInMillis: Long): String {
+        return analyticsRepository.formatListeningTime(timeInMillis)
     }
 
     init {
@@ -204,14 +440,14 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
         }
     }
 
-    // PERBAIKAN: Unified playSong method for both online and offline songs
+
     fun playSong(song: Song) {
         Log.d(TAG, "Playing song: ${song.title}, isOnline: ${song.isOnline}")
 
         // Reset history when manually selecting a song
         _playHistory.value = emptyList()
 
-        // PERBAIKAN: Always use the unified playSong method
+
         mediaPlayerService?.playSong(song)
 
         // Update current song state
@@ -223,7 +459,7 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
             _queue.value = listOf(song)
             _currentQueueIndex.value = 0
 
-            // PERBAIKAN: Only update last played for offline songs
+
             // Online songs don't need to update database timestamp
             if (!song.isOnline && song.id > 0) {
                 Log.d(TAG, "Updating last played timestamp for offline song ${song.id}")
@@ -1186,12 +1422,19 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
     // Handle logout
     fun handleLogout() {
         Log.d(TAG, "Handling logout")
+
+        // ADD: Cleanup analytics
+        mediaPlayerService?.handleUserLogout()
+        _currentMonthListeningTime.value = 0L
+        _monthlyAnalytics.value = null
+
         // Clear all songs and queue
         _allSongs.value = emptyList()
         _queue.value = emptyList()
         _currentQueueIndex.value = -1
         _currentSong.value = null
         _isPlaying.value = false
+
 
         // Stop playback
         mediaPlayerService?.stopPlayback()
@@ -1207,6 +1450,7 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
         _isPlaying.value = false
         _currentSong.value = null
 
+
         // Clear queue and reset state
         _queue.value = emptyList()
         _playHistory.value = emptyList()
@@ -1217,5 +1461,17 @@ class MainViewModel(private val songRepository: SongRepository) : ViewModel() {
         _duration.value = 0
 
         Log.d(TAG, "Playback stopped and state cleared")
+    }
+
+    fun handleUserLogin(userId: Long) {
+        viewModelScope.launch {
+            try {
+                mediaPlayerService?.initializeAnalyticsForUser(userId)
+                loadCurrentMonthAnalytics(userId)
+                Log.d(TAG, "Analytics initialized for user login: $userId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error handling user login for analytics", e)
+            }
+        }
     }
 }

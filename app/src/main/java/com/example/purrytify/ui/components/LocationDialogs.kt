@@ -42,10 +42,7 @@ import com.example.purrytify.R
 import com.example.purrytify.ui.theme.GREEN_COLOR
 import com.example.purrytify.util.CountryCodeHelper
 
-/**
- * Dialog untuk memilih metode location selection
- *
- */
+
 @Composable
 fun LocationSelectionDialog(
     onGoogleMapsClick: () -> Unit,
@@ -187,9 +184,7 @@ fun LocationSelectionDialog(
     }
 }
 
-/**
- * Dialog untuk memilih country dari daftar yang didukung
- */
+
 @Composable
 fun CountrySelectionDialog(
     onCountrySelected: (String, String) -> Unit, // (countryCode, countryName)

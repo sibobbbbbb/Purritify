@@ -89,23 +89,7 @@ import com.example.purrytify.util.TokenManager
 import com.example.purrytify.viewmodels.EditProfileViewModel
 import kotlinx.coroutines.launch
 
-/**
- * Screen untuk edit profile user
- *
- * Fungsi utama:
- * 1. Menampilkan current profile data
- * 2. Allow user edit foto profile (camera/gallery)
- * 3. Allow user edit location (auto-detect/manual/country list)
- * 4. Save changes ke server via API
- *
- * Alur kerja:
- * 1. Load current profile data
- * 2. User edit foto atau location
- * 3. Show preview changes
- * 4. User save changes
- * 5. Upload ke server dengan multipart/form-data
- * 6. Update UI dan navigate back
- */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(
@@ -474,10 +458,7 @@ fun EditProfileScreen(
     }
 }
 
-/**
- * Dialog untuk input koordinat manual
- * Digunakan sebagai fallback jika Google Maps tidak bisa return data
- */
+
 @Composable
 fun CoordinateInputDialog(
     onCoordinateSubmit: (String, String) -> Unit,

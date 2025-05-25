@@ -24,22 +24,7 @@ import kotlinx.coroutines.withTimeout
 import java.util.Locale
 import kotlin.coroutines.resume
 
-/**
- * Helper class untuk mengelola location-related operations
- *
- * Fungsi utama:
- * 1. Auto-detect current location menggunakan GPS/Network
- * 2. Manual location selection menggunakan Google Maps
- * 3. Geocoding untuk convert koordinat ke country code
- *
- * Alur kerja location selection:
- * 1. User tap "Select on Map"
- * 2. Launch Google Maps dengan koordinat default
- * 3. User pilih lokasi di Maps (tap dan hold untuk drop pin)
- * 4. User tap "Share" atau "Copy coordinates"
- * 5. Parse koordinat dari hasil sharing
- * 6. Convert koordinat ke country code
- */
+
 class LocationHelper(private val context: Context) {
     private val TAG = "LocationHelper"
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -57,19 +42,7 @@ class LocationHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Fungsi untuk membuat Intent Google Maps untuk memilih lokasi
-     *
-     * Alur kerja:
-     * 1. Buat URI dengan format geo: yang akan membuka Maps
-     * 2. Tambahkan parameter untuk menampilkan pin di lokasi default
-     * 3. Set package ke Google Maps untuk memastikan buka di GMaps
-     * 4. Return intent yang siap diluncurkan
-     *
-     * @param currentLatitude koordinat latitude saat ini (opsional)
-     * @param currentLongitude koordinat longitude saat ini (opsional)
-     * @return Intent untuk membuka Google Maps
-     */
+
     fun createGoogleMapsPickerIntent(
         currentLatitude: Double? = null,
         currentLongitude: Double? = null
@@ -80,12 +53,10 @@ class LocationHelper(private val context: Context) {
         val lat = currentLatitude ?: -6.2088
         val lng = currentLongitude ?: 106.8456
 
-        // Buat URI untuk Google Maps dengan mode drop pin
-        // Format: geo:lat,lng?q=lat,lng(label) akan menampilkan pin di lokasi tersebut
+
         val uri = "geo:$lat,$lng?q=$lat,$lng(Select+Location)"
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
 
-        // Pastikan menggunakan Google Maps
         if (isGoogleMapsAvailable()) {
             intent.setPackage("com.google.android.apps.maps")
             Log.d(TAG, "Using Google Maps package")
@@ -97,14 +68,7 @@ class LocationHelper(private val context: Context) {
         return intent
     }
 
-    /**
-     * Fungsi alternatif untuk membuat intent place picker (fallback)
-     *
-     * Alur kerja:
-     * 1. Buat intent Autocomplete dengan field yang dibutuhkan
-     * 2. Set mode overlay untuk UX yang lebih baik
-     * 3. Return intent yang siap diluncurkan
-     */
+
     fun createLocationPickerIntent(): Intent {
         Log.d(TAG, "Creating location picker intent")
 
@@ -125,16 +89,7 @@ class LocationHelper(private val context: Context) {
         return intent
     }
 
-    /**
-     * Parse hasil dari Place Autocomplete
-     *
-     * Alur kerja:
-     * 1. Cek result code (OK/ERROR/CANCELED)
-     * 2. Extract Place object dari intent data
-     * 3. Ambil address components untuk mencari country code
-     * 4. Fallback ke geocoder jika address components tidak ada
-     * 5. Return LocationResult dengan data lengkap
-     */
+
     fun parsePlacePickerResult(resultCode: Int, data: Intent?): LocationResult? {
         Log.d(TAG, "=== PARSING PLACE PICKER RESULT ===")
         Log.d(TAG, "Result code: $resultCode")
@@ -196,17 +151,7 @@ class LocationHelper(private val context: Context) {
         return null
     }
 
-    /**
-     * Parse hasil dari Google Maps (sharing coordinates)
-     *
-     * Alur kerja:
-     * 1. Cek apakah ada data di intent
-     * 2. Extract URI dari intent data
-     * 3. Parse berbagai format URI coordinate (geo:, google maps URL, dll)
-     * 4. Validasi koordinat yang ditemukan
-     * 5. Convert ke country code menggunakan geocoder
-     * 6. Return LocationResult atau null jika parsing gagal
-     */
+
     fun parseGoogleMapsResult(data: Intent?): LocationResult? {
         Log.d(TAG, "=== PARSING GOOGLE MAPS RESULT ===")
 
@@ -284,16 +229,7 @@ class LocationHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Mendapatkan lokasi current user menggunakan GPS/Network
-     *
-     * Alur kerja:
-     * 1. Cek permission dan location service
-     * 2. Coba ambil last known location yang masih fresh
-     * 3. Jika tidak ada, request location update dari GPS/Network
-     * 4. Convert koordinat ke country code
-     * 5. Return LocationResult dengan timeout 15 detik
-     */
+
     suspend fun getCurrentLocation(): LocationResult? {
         return try {
             withTimeout(15000L) {
@@ -305,9 +241,7 @@ class LocationHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Implementation internal untuk getCurrentLocation
-     */
+
     private suspend fun getCurrentLocationInternal(): LocationResult? = suspendCancellableCoroutine { continuation ->
         if (!hasLocationPermission()) {
             Log.e(TAG, "Location permission not granted")
@@ -408,16 +342,7 @@ class LocationHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Convert koordinat latitude/longitude ke country code
-     *
-     * Alur kerja:
-     * 1. Cek apakah Geocoder tersedia
-     * 2. Coba reverse geocoding dengan locale Indonesia
-     * 3. Fallback ke default locale jika gagal
-     * 4. Extract country code dan name dari address
-     * 5. Return LocationResult atau fallback ke Indonesia
-     */
+
     private fun locationToCountryCode(latitude: Double, longitude: Double): LocationResult? {
         if (geocoder == null) {
             Log.e(TAG, "Geocoder not available")
@@ -520,9 +445,7 @@ class LocationHelper(private val context: Context) {
         return latitude >= -11.0 && latitude <= 6.0 && longitude >= 95.0 && longitude <= 141.0
     }
 
-    /**
-     * Check apakah Google Maps tersedia di device
-     */
+
     fun isGoogleMapsAvailable(): Boolean {
         return try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0"))
@@ -549,15 +472,7 @@ class LocationHelper(private val context: Context) {
                 locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
     }
 
-    /**
-     * Parse coordinate string yang diinput manual oleh user
-     *
-     * Alur kerja:
-     * 1. Validate format latitude dan longitude
-     * 2. Convert ke double dan validate range
-     * 3. Convert ke country code menggunakan geocoder
-     * 4. Return LocationResult atau null jika invalid
-     */
+
     fun parseCoordinateString(latitudeStr: String, longitudeStr: String): LocationResult? {
         return try {
             val latitude = latitudeStr.toDouble()

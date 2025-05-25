@@ -1,5 +1,3 @@
-// Location: app/src/main/java/com/example/purrytify/ui/components/OnlineSongItem.kt
-
 package com.example.purrytify.ui.components
 
 import androidx.compose.foundation.background

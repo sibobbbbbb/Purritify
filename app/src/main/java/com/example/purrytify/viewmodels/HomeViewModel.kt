@@ -17,8 +17,6 @@ import kotlinx.coroutines.launch
 class HomeViewModel(private val songRepository: SongRepository) : ViewModel() {
     private val TAG = "HomeViewModel"
 
-    // PERBAIKAN: Hapus state management untuk current song dan playing status
-    // Biarkan MainViewModel yang mengelola state ini
 
     // LiveData untuk model UI
     private val _allSongs = MutableLiveData<List<Song>>(emptyList())
@@ -64,21 +62,12 @@ class HomeViewModel(private val songRepository: SongRepository) : ViewModel() {
     }
 
     private fun convertToModelSongs(entityList: List<EntitySong>): List<Song> {
-        // PERBAIKAN: Tidak lagi mencoba mengelola playing status di sini
-        // Biarkan MainViewModel yang menangani status playing
         return entityList.map { entity ->
             SongMapper.fromEntity(entity, false) // Always set playing to false
         }
     }
 
-    // PERBAIKAN: Hapus fungsi playSong dari HomeViewModel
-    // Biarkan MainViewModel yang mengelola pemutaran lagu
 
-    /**
-     * Toggle status like lagu
-     * @param songId ID lagu
-     * @param isLiked status like baru
-     */
     fun toggleLike(songId: Long, isLiked: Boolean) {
         viewModelScope.launch {
             try {
@@ -89,10 +78,7 @@ class HomeViewModel(private val songRepository: SongRepository) : ViewModel() {
         }
     }
 
-    /**
-     * Update last played timestamp untuk lagu tertentu
-     * Fungsi ini bisa dipanggil dari luar untuk update database
-     */
+
     fun updateLastPlayed(songId: Long) {
         viewModelScope.launch {
             try {

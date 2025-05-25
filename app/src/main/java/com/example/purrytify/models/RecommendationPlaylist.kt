@@ -1,5 +1,3 @@
-// Location: app/src/main/java/com/example/purrytify/models/RecommendationPlaylist.kt
-
 package com.example.purrytify.models
 
 data class RecommendationPlaylist(

@@ -1,5 +1,3 @@
-// Location: app/src/main/java/com/example/purrytify/models/OnlineSong.kt
-
 package com.example.purrytify.models
 
 import com.google.gson.annotations.SerializedName

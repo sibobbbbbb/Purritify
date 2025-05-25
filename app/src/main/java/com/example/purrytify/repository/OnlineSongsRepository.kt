@@ -1,5 +1,3 @@
-// Location: app/src/main/java/com/example/purrytify/repository/OnlineSongsRepository.kt
-
 package com.example.purrytify.repository
 
 import android.util.Log
@@ -64,7 +62,7 @@ class OnlineSongsRepository(private val songDao: SongDao) {
                     title = onlineSong.title,
                     artist = onlineSong.artist,
                     filePath = localFilePath, // Local path to the downloaded file
-                    artworkPath = onlineSong.artworkUrl, // We'll use the online artwork URL
+                    artworkPath = onlineSong.artworkUrl,
                     duration = onlineSong.getDurationInMillis(),
                     isLiked = false,
                     lastPlayed = null,

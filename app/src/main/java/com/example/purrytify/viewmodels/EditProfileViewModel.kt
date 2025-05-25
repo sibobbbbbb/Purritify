@@ -59,6 +59,15 @@ class EditProfileViewModel(
     private val _needCameraPermission = MutableStateFlow(false)
     val needCameraPermission: StateFlow<Boolean> = _needCameraPermission.asStateFlow()
 
+    init {
+
+        try {
+            photoHelper.cleanupOldFiles()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during cleanup: ${e.message}")
+        }
+    }
+
     /**
      * Load current profile data
      */
@@ -151,41 +160,46 @@ class EditProfileViewModel(
         Log.d(TAG, "Selected location cleared")
     }
 
-    /**
-     * Set photo from camera
-     */
     fun setPhotoFromCamera() {
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Processing camera photo")
 
+                photoHelper.debugPersistentState()
+
                 val photoUri = photoHelper.getCameraPhotoUri()
 
                 if (photoUri == null) {
-                    _errorMessage.value = "Failed to capture photo - no photo available"
+                    _errorMessage.value = "Failed to capture photo - no photo available. Please try again."
+                    Log.e(TAG, "Camera photo URI is null")
                     return@launch
                 }
 
+                Log.d(TAG, "Got camera photo URI: $photoUri")
+
                 if (!photoHelper.isValidPhotoUri(photoUri)) {
-                    _errorMessage.value = "Invalid photo file"
+                    _errorMessage.value = "Invalid photo file. Please try taking the photo again."
+                    Log.e(TAG, "Camera photo URI is invalid")
                     return@launch
                 }
 
                 val fileSize = photoHelper.getFileSize(photoUri)
                 if (fileSize <= 0) {
-                    _errorMessage.value = "Photo file is empty or corrupted"
+                    _errorMessage.value = "Photo file is empty or corrupted. Please try again."
+                    Log.e(TAG, "Camera photo file size is 0 or negative: $fileSize")
                     return@launch
                 }
 
                 if (fileSize > PhotoHelper.MAX_PHOTO_SIZE_BYTES) {
-                    _errorMessage.value = "Photo file too large (max 5MB)"
+                    _errorMessage.value = "Photo file too large (max 5MB). Please try a different photo."
+                    Log.e(TAG, "Camera photo file too large: $fileSize bytes")
                     return@launch
                 }
 
                 _selectedPhotoUri.value = photoUri
-                _successMessage.value = "Photo captured successfully"
+                _successMessage.value = "Photo captured successfully (${String.format("%.1f", fileSize / 1024.0 / 1024.0)} MB)"
 
-                Log.d(TAG, "Camera photo processed successfully")
+                Log.d(TAG, "Camera photo processed successfully - size: $fileSize bytes")
 
             } catch (e: Exception) {
                 _errorMessage.value = "Error processing camera photo: ${e.message}"
@@ -194,35 +208,44 @@ class EditProfileViewModel(
         }
     }
 
-    /**
-     * Set photo from gallery
-     */
+
     fun setPhotoFromGallery(photoUri: Uri?) {
         viewModelScope.launch {
             try {
                 if (photoUri == null) {
-                    _errorMessage.value = "No photo selected"
+                    _errorMessage.value = "No photo selected from gallery"
+                    Log.w(TAG, "Gallery photo URI is null")
                     return@launch
                 }
 
+                Log.d(TAG, "Processing gallery photo: $photoUri")
+
                 if (!photoHelper.isValidPhotoUri(photoUri)) {
-                    _errorMessage.value = "Invalid photo file"
+                    _errorMessage.value = "Invalid photo file selected. Please choose a different photo."
+                    Log.e(TAG, "Gallery photo URI is invalid")
                     return@launch
                 }
 
                 val fileSize = photoHelper.getFileSize(photoUri)
                 if (fileSize > PhotoHelper.MAX_PHOTO_SIZE_BYTES) {
-                    _errorMessage.value = "Photo file too large (max 5MB)"
+                    _errorMessage.value = "Photo file too large (max 5MB). Please choose a smaller photo."
+                    Log.e(TAG, "Gallery photo file too large: $fileSize bytes")
+                    return@launch
+                }
+
+                if (fileSize <= 0) {
+                    _errorMessage.value = "Could not read photo file. Please try a different photo."
+                    Log.e(TAG, "Gallery photo file size issue: $fileSize bytes")
                     return@launch
                 }
 
                 _selectedPhotoUri.value = photoUri
-                _successMessage.value = "Photo selected successfully"
-                Log.d(TAG, "Photo from gallery set: $photoUri")
+                _successMessage.value = "Photo selected successfully (${String.format("%.1f", fileSize / 1024.0 / 1024.0)} MB)"
+                Log.d(TAG, "Photo from gallery set: $photoUri, size: $fileSize bytes")
 
             } catch (e: Exception) {
-                _errorMessage.value = "Error processing photo: ${e.message}"
-                Log.e(TAG, "Exception processing gallery photo: ${e.message}")
+                _errorMessage.value = "Error processing selected photo: ${e.message}"
+                Log.e(TAG, "Exception processing gallery photo: ${e.message}", e)
             }
         }
     }
@@ -349,6 +372,16 @@ class EditProfileViewModel(
     fun requestCameraPermission() {
         if (!photoHelper.hasCameraPermission()) {
             _needCameraPermission.value = true
+        }
+    }
+
+
+    override fun onCleared() {
+        super.onCleared()
+        try {
+            photoHelper.cleanupOldFiles()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during final cleanup: ${e.message}")
         }
     }
 }

@@ -60,10 +60,8 @@ fun MiniPlayer(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Album Art - using simple Image with placeholder
-            // Note: For better image loading, use the SongCoverImage component
+
             if (currentSong.coverUrl.isNotEmpty()) {
-                // Ideal: Use Coil or Glide untuk loading image dari file path
                 AsyncImage(
                     model = ImageRequest.Builder(context)
                         .data(currentSong.coverUrl)
@@ -86,7 +84,6 @@ fun MiniPlayer(
                 )
             }
 
-            // Song Info
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -109,7 +106,6 @@ fun MiniPlayer(
                 )
             }
 
-            // ✅ PERBAIKAN: Share button with proper state management
             if (currentSong.isOnline && currentSong.onlineId != null) {
                 var showShareDialog by remember { mutableStateOf(false) }
 
@@ -125,7 +121,6 @@ fun MiniPlayer(
 
                 // Show share options dialog
                 if (showShareDialog) {
-                    // Helper function to convert milliseconds to mm:ss format
                     fun formatDurationFromMs(durationMs: Long): String {
                         val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes(durationMs)
                         val seconds = java.util.concurrent.TimeUnit.MILLISECONDS.toSeconds(durationMs) -

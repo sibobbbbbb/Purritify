@@ -5,9 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 
-/**
- * Activity untuk handle coordinate sharing dari Google Maps
- */
+
 class CoordinateShareActivity : Activity() {
 
     private val TAG = "CoordinateShareActivity"

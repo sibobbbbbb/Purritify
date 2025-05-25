@@ -18,7 +18,6 @@ object NotificationPermissionHandler {
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
         } else {
-            // For Android < 13, notifications are enabled by default
             true
         }
     }

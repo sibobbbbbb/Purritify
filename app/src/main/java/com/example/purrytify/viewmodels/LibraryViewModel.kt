@@ -21,8 +21,7 @@ class LibraryViewModel(private val repository: SongRepository) : ViewModel() {
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
     val songs: StateFlow<List<Song>> = _songs.asStateFlow()
 
-    // PERBAIKAN: Hapus state management untuk current song dan playing status
-    // Biarkan MainViewModel yang mengelola state ini secara terpusat
+
 
     // Status for operations
     private val _operationStatus = MutableStateFlow<OperationStatus?>(null)
@@ -41,7 +40,7 @@ class LibraryViewModel(private val repository: SongRepository) : ViewModel() {
                         filePath = dbSong.filePath,
                         duration = dbSong.duration,
                         isLiked = dbSong.isLiked,
-                        isPlaying = false, // PERBAIKAN: Always false, let MainViewModel handle this
+                        isPlaying = false,
                         isOnline = dbSong.isOnline,
                         onlineId = dbSong.onlineId
                     )
@@ -50,8 +49,7 @@ class LibraryViewModel(private val repository: SongRepository) : ViewModel() {
         }
     }
 
-    // PERBAIKAN: Hapus fungsi playSong dari LibraryViewModel
-    // MainViewModel akan mengelola semua playback state
+
 
     fun toggleLike(song: Song) {
         viewModelScope.launch {
@@ -163,8 +161,7 @@ class LibraryViewModel(private val repository: SongRepository) : ViewModel() {
                 Log.d(TAG, "Retrieved song for deletion: $existingSong")
 
                 if (existingSong != null) {
-                    // Notify main view model before deletion if provided
-                    // This ensures the song is removed from queue and playback if needed
+
                     mainViewModel?.handleSongDeleted(songId)
 
                     // Delete song from repository
@@ -198,7 +195,7 @@ class LibraryViewModel(private val repository: SongRepository) : ViewModel() {
             }
 
             // Delete artwork file if it exists and is a local file
-            // (not an http URL or other non-file path)
+
             if (!artworkPath.startsWith("http") && artworkPath.isNotEmpty()) {
                 val artworkFile = File(artworkPath)
                 if (artworkFile.exists()) {
@@ -214,8 +211,7 @@ class LibraryViewModel(private val repository: SongRepository) : ViewModel() {
         _operationStatus.value = null
     }
 
-    // PERBAIKAN: Hapus fungsi setIsPlaying karena tidak diperlukan lagi
-    // MainViewModel mengelola semua state playing
+
 }
 
 // Data class for operation status

@@ -1,24 +1,60 @@
 package com.example.purrytify.ui.screens
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeviceUnknown
+import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SpeakerGroup
+import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -26,10 +62,11 @@ import com.example.purrytify.models.AudioDevice
 import com.example.purrytify.models.AudioDeviceType
 import com.example.purrytify.models.ConnectionState
 import com.example.purrytify.viewmodels.AudioDeviceViewModel
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
-/**
- * Screen untuk menampilkan dan memilih perangkat audio
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioDeviceScreen(
@@ -42,8 +79,32 @@ fun AudioDeviceScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
     val successMessage by viewModel.successMessage.collectAsState()
 
+    val context = LocalContext.current
     // Snackbar host state
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    Log.d("AudioDeviceScreen", "Screen paused - maintaining routing")
+                    viewModel.onScreenPause()
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    Log.d("AudioDeviceScreen", "Screen resumed - resuming monitoring")
+                    viewModel.onScreenResume()
+                }
+                else -> {}
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     // Show error message
     LaunchedEffect(errorMessage) {
@@ -160,9 +221,6 @@ fun AudioDeviceScreen(
     }
 }
 
-/**
- * Card untuk menampilkan active device
- */
 @Composable
 fun ActiveDeviceCard(device: AudioDevice) {
     Card(
@@ -212,9 +270,7 @@ fun ActiveDeviceCard(device: AudioDevice) {
     }
 }
 
-/**
- * Item untuk setiap audio device dalam list
- */
+
 @Composable
 fun AudioDeviceItem(
     device: AudioDevice,
@@ -294,9 +350,7 @@ fun AudioDeviceItem(
     }
 }
 
-/**
- * Empty state message
- */
+
 @Composable
 fun EmptyStateMessage() {
     Column(
@@ -325,9 +379,7 @@ fun EmptyStateMessage() {
     }
 }
 
-/**
- * Helper function untuk mendapatkan icon berdasarkan device type
- */
+
 @Composable
 fun getDeviceIcon(type: AudioDeviceType) = when (type) {
     AudioDeviceType.INTERNAL_SPEAKER -> Icons.Default.PhoneAndroid
@@ -337,9 +389,7 @@ fun getDeviceIcon(type: AudioDeviceType) = when (type) {
     AudioDeviceType.UNKNOWN -> Icons.Default.DeviceUnknown
 }
 
-/**
- * Helper function untuk mendapatkan status color
- */
+
 @Composable
 fun getStatusColor(state: ConnectionState) = when (state) {
     ConnectionState.CONNECTED -> Color.Green
@@ -348,9 +398,7 @@ fun getStatusColor(state: ConnectionState) = when (state) {
     ConnectionState.DISCONNECTED -> Color.Red
 }
 
-/**
- * Helper function untuk mendapatkan status text
- */
+
 fun getStatusText(state: ConnectionState) = when (state) {
     ConnectionState.CONNECTED -> "Connected"
     ConnectionState.CONNECTING -> "Connecting..."

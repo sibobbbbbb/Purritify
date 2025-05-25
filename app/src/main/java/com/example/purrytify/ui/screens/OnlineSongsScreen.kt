@@ -1,5 +1,3 @@
-// Location: app/src/main/java/com/example/purrytify/ui/screens/OnlineSongsScreen.kt
-
 package com.example.purrytify.ui.screens
 
 import android.util.Log
@@ -185,7 +183,6 @@ fun OnlineSongsScreen(
                                     showRank = true,
                                     rank = index + 1,
                                     onSongClick = { clickedSong ->
-                                        // PERBAIKAN: Convert OnlineSong to Song and use callback
                                         onSongSelected(clickedSong)
                                     },
                                     onDownloadClick = { clickedSong ->
@@ -249,7 +246,6 @@ fun OnlineSongsScreen(
                                     showRank = true,
                                     rank = index + 1,
                                     onSongClick = { clickedSong ->
-                                        // PERBAIKAN: Convert OnlineSong to Song and use callback
                                         onSongSelected(clickedSong)
                                     },
                                     onDownloadClick = { clickedSong ->

@@ -88,9 +88,6 @@ interface SongDao {
     @Query("SELECT * FROM songs WHERE online_id = :onlineId LIMIT 1")
     fun getSongByOnlineId(onlineId: Int): Song?
 
-
-    // Add these methods to the existing SongDao interface:
-
     @Query("SELECT * FROM songs WHERE online_id = :onlineId AND user_id = :userId LIMIT 1")
     fun getDownloadedSongByOnlineId(onlineId: Int, userId: Int): Song?
 

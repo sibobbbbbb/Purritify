@@ -33,11 +33,16 @@ class ViewModelFactory(appContext: Context) : ViewModelProvider.Factory {
     }
 
     private val onlineSongsRepository by lazy {
-        OnlineSongsRepository(app.database.songDao())
+        OnlineSongsRepository(app.database.songDao()) // Fixed to use songDao
     }
 
     private val recommendationRepository by lazy {
         RecommendationRepository(app.database.songDao(), onlineSongsRepository)
+    }
+
+    // ADD: Analytics repository
+    private val analyticsRepository by lazy {
+        app.analyticsRepository
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -65,13 +70,18 @@ class ViewModelFactory(appContext: Context) : ViewModelProvider.Factory {
                 HomeViewModel(app.songRepository) as T
             }
             modelClass.isAssignableFrom(MainViewModel::class.java) -> {
-                MainViewModel(app.songRepository) as T
+                // UPDATED: Pass analytics repository and token manager to MainViewModel
+                MainViewModel(app.songRepository, analyticsRepository, tokenManager) as T
             }
             modelClass.isAssignableFrom(RecommendationViewModel::class.java) -> {
                 RecommendationViewModel(recommendationRepository, tokenManager) as T
             }
             modelClass.isAssignableFrom(AudioDeviceViewModel::class.java) -> {
                 AudioDeviceViewModel(contextRef.get() as android.app.Application) as T
+            }
+            // ADD: Analytics ViewModel
+            modelClass.isAssignableFrom(AnalyticsViewModel::class.java) -> {
+                AnalyticsViewModel(analyticsRepository) as T
             }
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }

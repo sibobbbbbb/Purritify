@@ -1,5 +1,3 @@
-// Location: app/src/main/java/com/example/purrytify/util/SongDownloadManager.kt
-
 package com.example.purrytify.util
 
 import android.app.DownloadManager
@@ -167,9 +165,6 @@ class SongDownloadManager(private val context: Context) {
         _downloadStates.value = currentStates
     }
 
-    // Location: app/src/main/java/com/example/purrytify/util/SongDownloadManager.kt
-// (Continuing the previous code)
-
     // Download a song
     fun downloadSong(song: OnlineSong): Long {
         // Check if song is already downloading
@@ -310,4 +305,3 @@ class SongDownloadManager(private val context: Context) {
     }
 }
 
-// Start audio downloa

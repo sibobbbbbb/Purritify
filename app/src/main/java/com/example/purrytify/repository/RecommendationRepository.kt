@@ -1,5 +1,3 @@
-// Location: app/src/main/java/com/example/purrytify/repository/RecommendationRepository.kt
-
 package com.example.purrytify.repository
 
 import android.util.Log
@@ -35,19 +33,15 @@ class RecommendationRepository(
                     .sortedByDescending { it.lastPlayed }
                     .take(10)
 
-                // 1. Generate Daily Mix (based on liked songs)
                 val dailyMix = generateDailyMix(likedSongs, allUserSongs, userId)
                 recommendations.add(dailyMix)
 
-                // 2. Generate Discover Weekly (new music discovery)
                 val discoverWeekly = generateDiscoverWeekly(recentlyPlayed, allUserSongs, userId)
                 recommendations.add(discoverWeekly)
 
-                // 3. Generate Pop Mix (genre-based)
                 val popMix = generateSpecificGenreMix("Pop Mix", likedSongs, allUserSongs, userId)
                 recommendations.add(popMix)
 
-                // 4. Generate Chill Mix (genre-based)
                 val chillMix = generateSpecificGenreMix("Chill Mix", likedSongs, allUserSongs, userId)
                 recommendations.add(chillMix)
 
@@ -85,7 +79,6 @@ class RecommendationRepository(
             Log.w(TAG, "Could not fetch online songs for daily mix", e)
         }
 
-        // Use the first liked song's cover, or first song in the mix, or default image
         val coverUrl = when {
             likedSongs.isNotEmpty() && likedSongs.first().artworkPath.isNotEmpty() -> likedSongs.first().artworkPath
             songs.isNotEmpty() && songs.first().coverUrl.isNotEmpty() -> songs.first().coverUrl

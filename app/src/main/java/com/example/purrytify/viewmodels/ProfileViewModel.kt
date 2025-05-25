@@ -45,7 +45,6 @@ class ProfileViewModel(
         loadMusicStats()
     }
 
-    // Fungsi untuk memuat profil pengguna
     fun loadUserProfile() {
         _isLoading.value = true
         viewModelScope.launch {
@@ -64,7 +63,7 @@ class ProfileViewModel(
         }
     }
 
-    // Fungsi untuk memuat statistik musik
+
     private fun loadMusicStats() {
         viewModelScope.launch {
             try {
@@ -95,7 +94,6 @@ class ProfileViewModel(
         loadMusicStats()
     }
 
-    // Fungsi logout yang sudah ada
     fun logout() {
         authRepository.logout()
     }

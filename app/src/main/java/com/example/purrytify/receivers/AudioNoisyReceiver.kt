@@ -6,10 +6,6 @@ import android.content.Intent
 import android.media.AudioManager
 import android.util.Log
 
-/**
- * BroadcastReceiver untuk mendeteksi saat audio menjadi "noisy"
- * (headphone dicabut, bluetooth disconnect)
- */
 class AudioNoisyReceiver(
     private val onAudioBecomingNoisy: () -> Unit
 ) : BroadcastReceiver() {

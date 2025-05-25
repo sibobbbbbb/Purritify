@@ -6,10 +6,6 @@ import android.content.Intent
 import android.util.Log
 import com.example.purrytify.viewmodels.MainViewModel
 
-/**
- * Broadcast receiver that listens for song completion events
- * and triggers the next song to play based on queue settings.
- */
 class SongCompletionReceiver(private val mainViewModel: MainViewModel) : BroadcastReceiver() {
 
     private val TAG = "SongCompletionReceiver"

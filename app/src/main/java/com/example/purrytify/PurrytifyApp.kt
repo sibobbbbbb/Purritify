@@ -6,6 +6,8 @@ import android.util.Log
 import com.android.volley.BuildConfig
 import com.example.purrytify.data.database.AppDatabase
 import com.example.purrytify.data.repository.SongRepository
+import com.example.purrytify.data.repository.AnalyticsRepository
+import com.example.purrytify.service.AnalyticsService
 import com.example.purrytify.network.RetrofitClient
 import com.example.purrytify.util.NetworkConnectionObserver
 import com.example.purrytify.util.TokenManager
@@ -30,6 +32,17 @@ class PurrytifyApp : Application() {
 
     val songRepository by lazy {
         SongRepository(database.songDao())
+    }
+
+    // ADD: Analytics components
+    val analyticsRepository by lazy {
+        Log.d("PurrytifyApp", "Creating AnalyticsRepository")
+        AnalyticsRepository(database.analyticsDao())
+    }
+
+    val analyticsService by lazy {
+        Log.d("PurrytifyApp", "Creating AnalyticsService")
+        AnalyticsService(analyticsRepository, this)
     }
 
     override fun onCreate() {

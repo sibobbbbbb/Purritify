@@ -17,11 +17,7 @@ import java.util.Date
 import java.util.Locale
 import androidx.core.net.toUri
 
-/**
- * Helper class untuk mengelola pengambilan foto dari camera atau gallery
- *
- * FIXED: Persistent state untuk survive activity recreation
- */
+
 class PhotoHelper(private val context: Context) {
     private val TAG = "PhotoHelper"
 
@@ -41,22 +37,18 @@ class PhotoHelper(private val context: Context) {
         const val MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024L
     }
 
-    /**
-     * Fungsi untuk membuat intent camera
-     *
-     * FIXED: Persistent state yang survive activity recreation
-     */
+
     fun createCameraIntent(): Pair<Intent, Uri>? {
         return try {
             // Clear previous camera state
             clearCameraPhotoState()
 
-            // Buat file temporary untuk foto
-            val photoFile = createImageFile()
+
+            val photoFile = createImageFileInternal()
 
             Log.d(TAG, "Created camera photo file: ${photoFile.absolutePath}")
 
-            // Buat URI menggunakan FileProvider
+
             val photoUri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
@@ -77,6 +69,13 @@ class PhotoHelper(private val context: Context) {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
+
+            if (cameraIntent.resolveActivity(context.packageManager) == null) {
+                Log.e(TAG, "No camera app available")
+                clearCameraPhotoState()
+                return null
+            }
+
             Log.d(TAG, "Camera intent created with URI: $photoUri")
             Log.d(TAG, "Saved to persistent storage - URI: $photoUri, File: ${photoFile.absolutePath}")
 
@@ -89,25 +88,25 @@ class PhotoHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Fungsi untuk membuat intent gallery
-     */
     fun createGalleryIntent(): Intent {
         return Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
             type = "image/*"
         }
     }
 
-    /**
-     * Fungsi untuk membuat file temporary untuk foto
-     */
-    private fun createImageFile(): File {
+
+    private fun createImageFileInternal(): File {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val imageFileName = "PURRYTIFY_${timeStamp}_"
 
-        // Coba external storage dulu, jika tidak bisa gunakan internal
-        val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-            ?: context.filesDir
+
+        val storageDir = File(context.filesDir, "pictures")
+
+
+        if (!storageDir.exists()) {
+            val created = storageDir.mkdirs()
+            Log.d(TAG, "Pictures directory created: $created at ${storageDir.absolutePath}")
+        }
 
         Log.d(TAG, "Creating image file in directory: ${storageDir.absolutePath}")
 
@@ -118,11 +117,30 @@ class PhotoHelper(private val context: Context) {
         )
     }
 
-    /**
-     * Fungsi untuk mendapatkan URI foto dari camera
-     *
-     * FIXED: Load dari persistent storage
-     */
+
+    private fun createImageFileExternal(): File {
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val imageFileName = "PURRYTIFY_${timeStamp}_"
+
+
+        val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+            ?: File(context.filesDir, "pictures") // Fallback ke internal
+
+
+        if (!storageDir.exists()) {
+            storageDir.mkdirs()
+        }
+
+        Log.d(TAG, "Creating image file in external directory: ${storageDir.absolutePath}")
+
+        return File.createTempFile(
+            imageFileName,
+            ".jpg",
+            storageDir
+        )
+    }
+
+
     fun getCameraPhotoUri(): Uri? {
         Log.d(TAG, "Getting camera photo URI from persistent storage")
 
@@ -152,15 +170,35 @@ class PhotoHelper(private val context: Context) {
             return null
         }
 
+
+        if (!file.canRead()) {
+            Log.w(TAG, "Camera photo file cannot be read: $filePath")
+            clearCameraPhotoState()
+            return null
+        }
+
         Log.d(TAG, "Camera photo file is valid - size: $fileSize bytes")
         return uri
     }
 
-    /**
-     * Fungsi untuk membersihkan state camera photo
-     */
+
     private fun clearCameraPhotoState() {
         Log.d(TAG, "Clearing camera photo state from persistent storage")
+
+
+        val filePath = prefs.getString(KEY_CAMERA_FILE_PATH, null)
+        if (filePath != null) {
+            try {
+                val file = File(filePath)
+                if (file.exists()) {
+                    val deleted = file.delete()
+                    Log.d(TAG, "Deleted old camera photo file: $deleted")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deleting old camera photo: ${e.message}")
+            }
+        }
+
         prefs.edit().apply {
             remove(KEY_CAMERA_URI)
             remove(KEY_CAMERA_FILE_PATH)
@@ -168,17 +206,13 @@ class PhotoHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Fungsi untuk membersihkan URI foto camera (public)
-     */
+
     fun clearCameraPhotoUri() {
         Log.d(TAG, "Public clear camera photo URI called")
         clearCameraPhotoState()
     }
 
-    /**
-     * Fungsi untuk validasi apakah URI foto valid
-     */
+
     fun isValidPhotoUri(uri: Uri?): Boolean {
         return try {
             if (uri == null) {
@@ -192,8 +226,8 @@ class PhotoHelper(private val context: Context) {
             val filePath = prefs.getString(KEY_CAMERA_FILE_PATH, null)
             if (uri.toString() == prefs.getString(KEY_CAMERA_URI, null) && filePath != null) {
                 val file = File(filePath)
-                val isValid = file.exists() && file.length() > 0
-                Log.d(TAG, "Camera URI validation - file exists: ${file.exists()}, size: ${file.length()}")
+                val isValid = file.exists() && file.length() > 0 && file.canRead()
+                Log.d(TAG, "Camera URI validation - file exists: ${file.exists()}, size: ${file.length()}, readable: ${file.canRead()}")
                 return isValid
             }
 
@@ -212,9 +246,7 @@ class PhotoHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Fungsi untuk mendapatkan ukuran file dari URI
-     */
+
     fun getFileSize(uri: Uri): Long {
         return try {
             Log.d(TAG, "Getting file size for URI: $uri")
@@ -241,9 +273,7 @@ class PhotoHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Debug function untuk check persistent state
-     */
+
     fun debugPersistentState() {
         Log.d(TAG, "=== PERSISTENT STATE DEBUG ===")
         Log.d(TAG, "Stored URI: ${prefs.getString(KEY_CAMERA_URI, "null")}")
@@ -254,13 +284,13 @@ class PhotoHelper(private val context: Context) {
             val file = File(filePath)
             Log.d(TAG, "File exists: ${file.exists()}")
             Log.d(TAG, "File size: ${file.length()}")
+            Log.d(TAG, "File readable: ${file.canRead()}")
+            Log.d(TAG, "File path: ${file.absolutePath}")
         }
         Log.d(TAG, "==============================")
     }
 
-    /**
-     * Check apakah app memiliki permission camera
-     */
+
     fun hasCameraPermission(): Boolean {
         return ActivityCompat.checkSelfPermission(
             context,
@@ -268,18 +298,36 @@ class PhotoHelper(private val context: Context) {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    /**
-     * Check apakah device memiliki camera
-     */
+
     fun hasCamera(): Boolean {
         return context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
     }
 
-    /**
-     * Check apakah gallery tersedia
-     */
+
     fun hasGallery(): Boolean {
         val galleryIntent = createGalleryIntent()
         return galleryIntent.resolveActivity(context.packageManager) != null
+    }
+
+
+    fun cleanupOldFiles() {
+        try {
+            val picturesDir = File(context.filesDir, "pictures")
+            if (picturesDir.exists()) {
+                val files = picturesDir.listFiles()
+                files?.forEach { file ->
+                    if (file.name.startsWith("PURRYTIFY_") && file.name.endsWith(".jpg")) {
+                        // Hapus file yang lebih dari 1 hari
+                        val fileAge = System.currentTimeMillis() - file.lastModified()
+                        if (fileAge > 24 * 60 * 60 * 1000) { // 24 jam
+                            val deleted = file.delete()
+                            Log.d(TAG, "Cleaned up old file: ${file.name}, deleted: $deleted")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cleaning up old files: ${e.message}")
+        }
     }
 }

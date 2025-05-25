@@ -51,13 +51,11 @@ class UserRepository(private val tokenManager: TokenManager) {
 
             Log.d(TAG, "Editing profile with location: $location, photo: $profilePhotoUri")
 
-            // Siapkan location part jika ada
             val locationPart = location?.let { loc ->
                 Log.d(TAG, "Creating location part: $loc")
                 loc.toRequestBody("text/plain".toMediaTypeOrNull())
             }
 
-            // Siapkan profile photo part jika ada
             val profilePhotoPart = profilePhotoUri?.let { uriString ->
                 Log.d(TAG, "Processing profile photo URI: $uriString")
 
@@ -79,12 +77,10 @@ class UserRepository(private val tokenManager: TokenManager) {
                 }
             }
 
-            // Validasi minimal ada satu perubahan
             if (locationPart == null && profilePhotoPart == null) {
                 return Result.failure(Exception("Tidak ada perubahan untuk disimpan"))
             }
 
-            // Kirim request ke server dengan parts terpisah
             Log.d(TAG, "Sending edit profile request to server")
             val response = RetrofitClient.apiService.editProfile(
                 token = "Bearer $token",
@@ -113,7 +109,6 @@ class UserRepository(private val tokenManager: TokenManager) {
         }
     }
 
-    // Fungsi helper untuk mengkonversi URI ke File
     private fun uriToFile(context: Context, uri: Uri, filename: String): File? {
         return try {
             Log.d(TAG, "Converting URI to file: $uri")

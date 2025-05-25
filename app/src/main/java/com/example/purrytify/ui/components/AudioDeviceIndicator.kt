@@ -17,13 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.purrytify.models.AudioDeviceType
 import com.example.purrytify.viewmodels.AudioDeviceViewModel
 
-/**
- * Komponen untuk menampilkan indikator perangkat audio yang aktif
- * Bisa diklik untuk membuka audio device selection screen
- *
- * @param onClick Callback saat indicator diklik
- * @param modifier Modifier untuk customization
- */
+
 @Composable
 fun AudioDeviceIndicator(
     onClick: () -> Unit,
@@ -81,10 +75,7 @@ fun AudioDeviceIndicator(
     }
 }
 
-/**
- * Mini version untuk MiniPlayer
- * Hanya menampilkan icon tanpa text
- */
+
 @Composable
 fun AudioDeviceIndicatorMini(
     onClick: () -> Unit,
@@ -94,7 +85,7 @@ fun AudioDeviceIndicatorMini(
     val activeDevice by viewModel.activeDevice.collectAsState()
 
     activeDevice?.let { device ->
-        // Hanya tampilkan untuk non-internal speaker
+
         if (device.type != AudioDeviceType.INTERNAL_SPEAKER) {
             IconButton(
                 onClick = onClick,

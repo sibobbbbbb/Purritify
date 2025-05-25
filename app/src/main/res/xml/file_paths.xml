@@ -2,4 +2,35 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="qr_codes" path="qr_codes/" />
     <files-path name="files" path="." />
+    <cache-path name="analytics_exports" path="." />
+
+    <!-- Internal storage cache directory -->
+    <cache-path
+        name="cache"
+        path="." />
+
+    <!-- Internal storage files directory -->
+    <files-path
+        name="internal"
+        path="." />
+
+    <!-- External storage files directory (getExternalFilesDir) -->
+    <external-files-path
+        name="external_files"
+        path="." />
+
+    <!-- External storage Pictures directory -->
+    <external-files-path
+        name="pictures"
+        path="Pictures/" />
+
+    <!-- External storage root directory (requires WRITE_EXTERNAL_STORAGE) -->
+    <external-path
+        name="external"
+        path="." />
+
+    <!-- Internal storage root directory -->
+    <root-path
+        name="root"
+        path="." />
 </paths>

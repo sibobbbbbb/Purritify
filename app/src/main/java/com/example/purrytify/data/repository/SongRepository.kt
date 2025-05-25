@@ -19,7 +19,6 @@ class SongRepository(private val songDao: SongDao) {
     }
 
     // Properties for accessing songs
-    // These will return user-specific or all songs depending on if user ID is set
     val allSongs: LiveData<List<Song>>
         get() = if (currentUserId > 0) {
             songDao.getSongsByUserId(currentUserId)

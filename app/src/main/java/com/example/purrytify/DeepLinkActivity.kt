@@ -12,9 +12,7 @@ import com.example.purrytify.util.ShareUtils
 import com.example.purrytify.util.TokenManager
 import kotlinx.coroutines.launch
 
-/**
- * Activity to handle deep link intents for song sharing
- */
+
 class DeepLinkActivity : ComponentActivity() {
     private val TAG = "DeepLinkActivity"
     private lateinit var tokenManager: TokenManager

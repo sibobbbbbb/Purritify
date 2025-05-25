@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Speaker
@@ -220,7 +221,7 @@ fun ProfileContent(
     onLogout: () -> Unit,
     navController: NavController
 ) {
-    LocalContext.current
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -325,40 +326,50 @@ fun ProfileContent(
             }
         }
 
-        // Spacer to push buttons down
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
-        // Audio Output Device Setting
-        ListItem(
-            headlineContent = {
+        // NAVIGATION BUTTONS SECTION
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF1E1E1E)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
                 Text(
-                    "Audio Output Device",
-//                    color = Color.White
+                    text = "Features",
+                    color = Color.White,
+                    fontFamily = FontFamily(Font(R.font.poppins_semi_bold)),
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(bottom = 16.dp)
                 )
-            },
-            supportingContent = {
-                Text(
-                    "Select audio output device",
-//                    color = Color.White.copy(alpha = 0.7f)
+
+                // Sound Capsule (Analytics) Button
+                NavigationItem(
+                    icon = Icons.Default.Analytics,
+                    title = "Sound Capsule",
+                    subtitle = "View your music analytics and listening habits",
+                    onClick = {
+                        navController.navigate("analytics")
+                    }
                 )
-            },
-            leadingContent = {
-                Icon(
-                    Icons.Default.Speaker,
-                    contentDescription = null,
-//                    tint = Color.White
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Audio Output Device Setting
+                NavigationItem(
+                    icon = Icons.Default.Speaker,
+                    title = "Audio Output Device",
+                    subtitle = "Select audio output device",
+                    onClick = {
+                        navController.navigate("audio_devices")
+                    }
                 )
-            },
-            modifier = Modifier
-                .clickable {
-                    navController.navigate("audio_devices")
-                }
-                .background(
-                    BACKGROUND_COLOR,
-                    RoundedCornerShape(8.dp)
-                )
-                .padding(4.dp)
-        )
+            }
+        }
 
         // Spacer to push the logout button to the bottom
         Spacer(modifier = Modifier.height(48.dp))
@@ -373,6 +384,65 @@ fun ProfileContent(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Logout")
+        }
+    }
+}
+
+@Composable
+fun NavigationItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF282828)
+        ),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = GREEN_COLOR,
+                modifier = Modifier.size(32.dp)
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontFamily = FontFamily(Font(R.font.poppins_semi_bold)),
+                    fontSize = 16.sp
+                )
+
+                Text(
+                    text = subtitle,
+                    color = Color.Gray,
+                    fontFamily = FontFamily(Font(R.font.poppins_regular)),
+                    fontSize = 14.sp
+                )
+            }
+
+            Icon(
+                painter = painterResource(id = android.R.drawable.ic_menu_more),
+                contentDescription = "Navigate",
+                tint = Color.Gray,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -407,13 +477,12 @@ fun StatCard(count: String, label: String) {
     }
 }
 
-// Helper function to format date string
+
 private fun formatDate(dateString: String): String {
-    // You can implement proper date formatting logic here
-    // For now, just return a simplified version
+
     return try {
         val parts = dateString.split("T")
-        parts[0]  // Just return the date part
+        parts[0]
     } catch (e: Exception) {
         dateString
     }
