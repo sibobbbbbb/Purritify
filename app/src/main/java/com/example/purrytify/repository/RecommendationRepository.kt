@@ -35,19 +35,21 @@ class RecommendationRepository(
                     .sortedByDescending { it.lastPlayed }
                     .take(10)
 
-                // Generate Daily Mix based on liked songs
-                if (likedSongs.isNotEmpty()) {
-                    val dailyMix = generateDailyMix(likedSongs, allUserSongs, userId)
-                    recommendations.add(dailyMix)
-                }
+                // 1. Generate Daily Mix (based on liked songs)
+                val dailyMix = generateDailyMix(likedSongs, allUserSongs, userId)
+                recommendations.add(dailyMix)
 
-                // Generate Discover Weekly (mix of online and local songs)
+                // 2. Generate Discover Weekly (new music discovery)
                 val discoverWeekly = generateDiscoverWeekly(recentlyPlayed, allUserSongs, userId)
                 recommendations.add(discoverWeekly)
 
-                // Generate genre-based mixes
-                val genreMixes = generateGenreMixes(likedSongs, allUserSongs, userId)
-                recommendations.addAll(genreMixes)
+                // 3. Generate Pop Mix (genre-based)
+                val popMix = generateSpecificGenreMix("Pop Mix", likedSongs, allUserSongs, userId)
+                recommendations.add(popMix)
+
+                // 4. Generate Chill Mix (genre-based)
+                val chillMix = generateSpecificGenreMix("Chill Mix", likedSongs, allUserSongs, userId)
+                recommendations.add(chillMix)
 
                 Result.success(recommendations)
             } catch (e: Exception) {
@@ -64,15 +66,15 @@ class RecommendationRepository(
     ): RecommendationPlaylist {
         val songs = mutableListOf<com.example.purrytify.models.Song>()
 
-        // Add some liked songs (up to 10)
+        // Add liked songs (up to 10)
         val shuffledLiked = likedSongs.shuffled().take(10)
         songs.addAll(shuffledLiked.map { convertToUiSong(it) })
 
-        // Add similar songs from user's library
-        val similarSongs = findSimilarSongs(likedSongs, allUserSongs).take(10)
+        // Add similar songs from user's library based on artist matching
+        val similarSongs = findSimilarSongs(likedSongs, allUserSongs).take(5)
         songs.addAll(similarSongs.map { convertToUiSong(it) })
 
-        // Try to add some online songs if available
+        // Add popular online songs
         try {
             val globalSongs = RetrofitClient.apiService.getGlobalTopSongs()
             if (globalSongs.isSuccessful && globalSongs.body() != null) {
@@ -83,11 +85,18 @@ class RecommendationRepository(
             Log.w(TAG, "Could not fetch online songs for daily mix", e)
         }
 
+        // Use the first liked song's cover, or first song in the mix, or default image
+        val coverUrl = when {
+            likedSongs.isNotEmpty() && likedSongs.first().artworkPath.isNotEmpty() -> likedSongs.first().artworkPath
+            songs.isNotEmpty() && songs.first().coverUrl.isNotEmpty() -> songs.first().coverUrl
+            else -> "https://picsum.photos/200" // Default cover
+        }
+
         return RecommendationPlaylist(
             id = "daily_mix_${System.currentTimeMillis()}",
             title = "Daily Mix",
-            description = "Songs you love and more",
-            coverUrl = if (likedSongs.isNotEmpty()) likedSongs.first().artworkPath else "",
+            description = "Your top songs",
+            coverUrl = coverUrl,
             songs = songs.shuffled().take(20),
             type = "daily_mix"
         )
@@ -102,10 +111,11 @@ class RecommendationRepository(
 
         // Get songs user hasn't played recently
         val recentIds = recentlyPlayed.map { it.id }.toSet()
-        val unplayedSongs = allUserSongs.filter { it.id !in recentIds }.shuffled().take(10)
+        val unplayedSongs = allUserSongs.filter { it.id !in recentIds && it.lastPlayed == null }
+            .shuffled().take(10)
         songs.addAll(unplayedSongs.map { convertToUiSong(it) })
 
-        // Add online songs for discovery
+        // Add online songs from top charts for discovery
         try {
             val globalSongs = RetrofitClient.apiService.getGlobalTopSongs()
             if (globalSongs.isSuccessful && globalSongs.body() != null) {
@@ -119,64 +129,82 @@ class RecommendationRepository(
         return RecommendationPlaylist(
             id = "discover_weekly_${System.currentTimeMillis()}",
             title = "Discover Weekly",
-            description = "New music picked for you",
-            coverUrl = "https://i.scdn.co/image/ab67706f00000002ca5a7517156021292e5663a6", // Default cover
+            description = "New music for you",
+            coverUrl = "https://i.scdn.co/image/ab67706f00000002ca5a7517156021292e5663a6",
             songs = songs.shuffled().take(25),
             type = "discover_weekly"
         )
     }
 
-    private suspend fun generateGenreMixes(
+    private suspend fun generateSpecificGenreMix(
+        genreName: String,
         likedSongs: List<Song>,
         allUserSongs: List<Song>,
         userId: Int
-    ): List<RecommendationPlaylist> {
-        val mixes = mutableListOf<RecommendationPlaylist>()
+    ): RecommendationPlaylist {
+        val genreSongs = mutableListOf<com.example.purrytify.models.Song>()
 
-        // Simple genre classification based on artist names and song titles
-        val genres = listOf("Pop Mix", "Rock Mix", "Electronic Mix", "Chill Mix")
+        // Get genre keywords
+        val genreKeywords = getGenreKeywords(genreName)
 
-        genres.forEach { genreName ->
-            val genreSongs = mutableListOf<com.example.purrytify.models.Song>()
-
-            // Get user songs that might fit this genre
-            val genreKeywords = getGenreKeywords(genreName)
-
-            val matchingSongs = allUserSongs.filter { song ->
-                genreKeywords.any { keyword ->
-                    song.title.contains(keyword, ignoreCase = true) ||
-                            song.artist.contains(keyword, ignoreCase = true)
-                }
-            }.shuffled().take(10)
-
-            genreSongs.addAll(matchingSongs.map { convertToUiSong(it) })
-
-            // Add online songs for variety
-            try {
-                val globalSongs = RetrofitClient.apiService.getGlobalTopSongs()
-                if (globalSongs.isSuccessful && globalSongs.body() != null) {
-                    val onlineSongs = globalSongs.body()!!.shuffled().take(10)
-                    genreSongs.addAll(onlineSongs.map { convertOnlineToUiSong(it) })
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Could not fetch online songs for genre mix", e)
+        // Find matching songs from user's library
+        val matchingSongs = allUserSongs.filter { song ->
+            genreKeywords.any { keyword ->
+                song.title.contains(keyword, ignoreCase = true) ||
+                        song.artist.contains(keyword, ignoreCase = true)
             }
+        }.shuffled().take(10)
 
-            if (genreSongs.isNotEmpty()) {
-                mixes.add(
-                    RecommendationPlaylist(
-                        id = "${genreName.lowercase().replace(" ", "_")}_${System.currentTimeMillis()}",
-                        title = genreName,
-                        description = "Your $genreName playlist",
-                        coverUrl = getGenreCoverUrl(genreName),
-                        songs = genreSongs.shuffled().take(20),
-                        type = "genre_mix"
-                    )
-                )
+        genreSongs.addAll(matchingSongs.map { convertToUiSong(it) })
+
+        // Add online songs for variety
+        try {
+            val globalSongs = RetrofitClient.apiService.getGlobalTopSongs()
+            if (globalSongs.isSuccessful && globalSongs.body() != null) {
+                // Filter online songs by genre keywords if possible
+                val filteredOnlineSongs = globalSongs.body()!!.filter { song ->
+                    genreKeywords.any { keyword ->
+                        song.title.contains(keyword, ignoreCase = true) ||
+                                song.artist.contains(keyword, ignoreCase = true)
+                    }
+                }.take(5)
+
+                // If not enough filtered songs, add random ones
+                val additionalSongs = if (filteredOnlineSongs.size < 5) {
+                    globalSongs.body()!!.shuffled().take(5 - filteredOnlineSongs.size)
+                } else {
+                    emptyList()
+                }
+
+                genreSongs.addAll(filteredOnlineSongs.map { convertOnlineToUiSong(it) })
+                genreSongs.addAll(additionalSongs.map { convertOnlineToUiSong(it) })
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not fetch online songs for $genreName", e)
         }
 
-        return mixes
+        // Ensure we have at least some songs
+        if (genreSongs.isEmpty()) {
+            // Add some random songs if no genre matches found
+            val randomSongs = allUserSongs.shuffled().take(10)
+            genreSongs.addAll(randomSongs.map { convertToUiSong(it) })
+        }
+
+        // Use the first song's cover from the mix, or default image
+        val coverUrl = if (genreSongs.isNotEmpty() && genreSongs.first().coverUrl.isNotEmpty()) {
+            genreSongs.first().coverUrl
+        } else {
+            getGenreCoverUrl(genreName)
+        }
+
+        return RecommendationPlaylist(
+            id = "${genreName.lowercase().replace(" ", "_")}_${System.currentTimeMillis()}",
+            title = genreName,
+            description = "Your $genreName playlist",
+            coverUrl = coverUrl,
+            songs = genreSongs.shuffled().take(20),
+            type = "genre_mix"
+        )
     }
 
     private fun findSimilarSongs(likedSongs: List<Song>, allSongs: List<Song>): List<Song> {
@@ -194,10 +222,8 @@ class RecommendationRepository(
 
     private fun getGenreKeywords(genreName: String): List<String> {
         return when (genreName) {
-            "Pop Mix" -> listOf("pop", "taylor", "dua", "ariana", "bruno", "ed", "justin")
-            "Rock Mix" -> listOf("rock", "metal", "punk", "alternative", "indie", "guitar")
-            "Electronic Mix" -> listOf("electronic", "edm", "house", "techno", "dubstep", "synth")
-            "Chill Mix" -> listOf("chill", "relax", "acoustic", "soft", "ambient", "jazz", "lo-fi")
+            "Pop Mix" -> listOf("pop", "taylor", "dua", "ariana", "bruno", "ed", "justin", "selena", "shawn", "charlie")
+            "Chill Mix" -> listOf("chill", "relax", "acoustic", "soft", "ambient", "jazz", "lo-fi", "calm", "sleep", "meditation")
             else -> emptyList()
         }
     }
@@ -205,8 +231,6 @@ class RecommendationRepository(
     private fun getGenreCoverUrl(genreName: String): String {
         return when (genreName) {
             "Pop Mix" -> "https://i.scdn.co/image/ab67706f000000027ea4d505212b9de1f72c5112"
-            "Rock Mix" -> "https://i.scdn.co/image/ab67706f00000002fe24d7084be472288cd6ee6c"
-            "Electronic Mix" -> "https://i.scdn.co/image/ab67706f00000002a27c65dedaaf21ac2ed5c551"
             "Chill Mix" -> "https://i.scdn.co/image/ab67706f000000028b5575c8d9c62d9701a84c36"
             else -> "https://i.scdn.co/image/ab67706f00000002ca5a7517156021292e5663a6"
         }

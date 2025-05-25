@@ -2,6 +2,8 @@ package com.example.purrytify.ui.screens
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -26,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Person
@@ -61,8 +64,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -73,7 +79,9 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.purrytify.R
+import com.example.purrytify.models.LocationResult
 import com.example.purrytify.repository.UserRepository
+import com.example.purrytify.ui.components.CountrySelectionDialog
 import com.example.purrytify.ui.components.LocationSelectionDialog
 import com.example.purrytify.ui.theme.BACKGROUND_COLOR
 import com.example.purrytify.ui.theme.GREEN_COLOR
@@ -81,6 +89,23 @@ import com.example.purrytify.util.TokenManager
 import com.example.purrytify.viewmodels.EditProfileViewModel
 import kotlinx.coroutines.launch
 
+/**
+ * Screen untuk edit profile user
+ *
+ * Fungsi utama:
+ * 1. Menampilkan current profile data
+ * 2. Allow user edit foto profile (camera/gallery)
+ * 3. Allow user edit location (auto-detect/manual/country list)
+ * 4. Save changes ke server via API
+ *
+ * Alur kerja:
+ * 1. Load current profile data
+ * 2. User edit foto atau location
+ * 3. Show preview changes
+ * 4. User save changes
+ * 5. Upload ke server dengan multipart/form-data
+ * 6. Update UI dan navigate back
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(
@@ -118,9 +143,11 @@ fun EditProfileScreen(
     // Dialog states
     var showLocationSelectionDialog by remember { mutableStateOf(false) }
     var showCountrySelectorDialog by remember { mutableStateOf(false) }
+    var showCoordinateInputDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
 
     // Activity result launchers
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -142,7 +169,8 @@ fun EditProfileScreen(
         }
     }
 
-    rememberLauncherForActivityResult(
+    // Google Maps launcher
+    val googleMapsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         Log.d("EditProfileScreen", "=== GOOGLE MAPS RESULT ===")
@@ -166,19 +194,26 @@ fun EditProfileScreen(
                     Log.w("EditProfileScreen", "Failed to parse location")
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            message = "Could not get location from Maps. Please select from country list.",
+                            message = "Could not get location from Maps. Try pasting coordinates or select from country list.",
                             duration = SnackbarDuration.Long
                         )
                     }
-                    showCountrySelectorDialog = true
+                    showCoordinateInputDialog = true
                 }
             }
             Activity.RESULT_CANCELED -> {
                 Log.d("EditProfileScreen", "Maps cancelled")
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "You can paste coordinates here or select from country list",
+                        duration = SnackbarDuration.Long
+                    )
+                }
+                showCoordinateInputDialog = true
             }
             else -> {
                 Log.w("EditProfileScreen", "Unexpected result: ${result.resultCode}")
-                showCountrySelectorDialog = true
+                showCoordinateInputDialog = true
             }
         }
     }
@@ -251,66 +286,72 @@ fun EditProfileScreen(
         viewModel.loadCurrentProfile()
     }
 
-    val locationPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        Log.d("EditProfileScreen", "=== LOCATION PICKER RESULT ===")
-        Log.d("EditProfileScreen", "Result code: ${result.resultCode}")
-
-        val locationResult = viewModel.locationHelper.parsePlacePickerResult(
-            result.resultCode,
-            result.data
-        )
-
-        if (locationResult != null) {
-            Log.d("EditProfileScreen", "Location parsed: ${locationResult.countryName}")
-            viewModel.setManualLocation(locationResult)
-            scope.launch {
-                snackbarHostState.showSnackbar(
-                    message = "Location selected: ${locationResult.countryName}",
-                    duration = SnackbarDuration.Short
-                )
-            }
-        } else {
-            Log.w("EditProfileScreen", "Failed to parse location")
-            scope.launch {
-                snackbarHostState.showSnackbar(
-                    message = "Could not get location. Please select from country list.",
-                    duration = SnackbarDuration.Long
-                )
-            }
-            showCountrySelectorDialog = true
-        }
-    }
-
-// Update LocationSelectionDialog untuk menggunakan location picker
+    // Dialog untuk memilih method location
     if (showLocationSelectionDialog) {
         LocationSelectionDialog(
             onGoogleMapsClick = {
                 try {
-                    // Gunakan location picker intent
-                    val intent = viewModel.locationHelper.createLocationPickerIntent()
-                    locationPickerLauncher.launch(intent)
+                    // Launch Google Maps untuk pick location
+                    val intent = viewModel.locationHelper.createGoogleMapsPickerIntent()
+                    googleMapsLauncher.launch(intent)
                 } catch (e: Exception) {
-                    Log.e("EditProfileScreen", "Error launching location picker: ${e.message}")
-
-                    // Fallback ke maps selector
-                    try {
-                        val mapsIntent = viewModel.locationHelper.createMapsSelectorIntent()
-                        locationPickerLauncher.launch(mapsIntent)
-                    } catch (ex: Exception) {
-                        Log.e("EditProfileScreen", "Error launching maps: ${ex.message}")
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                message = "Error opening location picker: ${ex.message}",
-                                duration = SnackbarDuration.Long
-                            )
-                        }
-                        showCountrySelectorDialog = true
+                    Log.e("EditProfileScreen", "Error launching Google Maps: ${e.message}")
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = "Error opening Google Maps: ${e.message}",
+                            duration = SnackbarDuration.Long
+                        )
                     }
+                    showCountrySelectorDialog = true
                 }
             },
             onDismiss = { showLocationSelectionDialog = false }
+        )
+    }
+
+    // Dialog untuk input koordinat manual
+    if (showCoordinateInputDialog) {
+        CoordinateInputDialog(
+            onCoordinateSubmit = { latitude, longitude ->
+                val locationResult = viewModel.locationHelper.parseCoordinateString(latitude, longitude)
+                if (locationResult != null) {
+                    viewModel.setManualLocation(locationResult)
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = "Location set: ${locationResult.countryName}",
+                            duration = SnackbarDuration.Short
+                        )
+                    }
+                } else {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = "Invalid coordinates. Please check format.",
+                            duration = SnackbarDuration.Short
+                        )
+                    }
+                }
+            },
+            onCountryListClick = {
+                showCountrySelectorDialog = true
+            },
+            onDismiss = { showCoordinateInputDialog = false }
+        )
+    }
+
+    // Dialog untuk pilih country
+    if (showCountrySelectorDialog) {
+        CountrySelectionDialog(
+            onCountrySelected = { countryCode, countryName ->
+                val locationResult = LocationResult(
+                    countryCode = countryCode,
+                    countryName = countryName,
+                    address = countryName,
+                    latitude = null,
+                    longitude = null
+                )
+                viewModel.setManualLocation(locationResult)
+            },
+            onDismiss = { showCountrySelectorDialog = false }
         )
     }
 
@@ -433,6 +474,182 @@ fun EditProfileScreen(
     }
 }
 
+/**
+ * Dialog untuk input koordinat manual
+ * Digunakan sebagai fallback jika Google Maps tidak bisa return data
+ */
+@Composable
+fun CoordinateInputDialog(
+    onCoordinateSubmit: (String, String) -> Unit,
+    onCountryListClick: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var latitudeText by remember { mutableStateOf("") }
+    var longitudeText by remember { mutableStateOf("") }
+    val clipboardManager = LocalClipboardManager.current
+
+    // Try to parse clipboard for coordinates
+    LaunchedEffect(Unit) {
+        try {
+            val clipboardText = clipboardManager.getText()?.text
+            if (!clipboardText.isNullOrBlank()) {
+                // Try to extract coordinates from clipboard
+                val coordPattern = Regex("(-?\\d+\\.\\d+),\\s*(-?\\d+\\.\\d+)")
+                coordPattern.find(clipboardText)?.let { match ->
+                    latitudeText = match.groupValues[1]
+                    longitudeText = match.groupValues[2]
+                }
+            }
+        } catch (e: Exception) {
+            Log.d("CoordinateDialog", "Could not parse clipboard: ${e.message}")
+        }
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF1A1A1A)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp)
+            ) {
+                Text(
+                    text = "Enter Coordinates",
+                    color = Color.White,
+                    fontFamily = FontFamily(Font(R.font.poppins_semi_bold)),
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                Text(
+                    text = "Paste coordinates from Google Maps or enter manually:",
+                    color = Color.Gray,
+                    fontFamily = FontFamily(Font(R.font.poppins_regular)),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Paste button
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            val clipboardText = clipboardManager.getText()?.text
+                            if (!clipboardText.isNullOrBlank()) {
+                                val coordPattern = Regex("(-?\\d+\\.\\d+),\\s*(-?\\d+\\.\\d+)")
+                                coordPattern.find(clipboardText)?.let { match ->
+                                    latitudeText = match.groupValues[1]
+                                    longitudeText = match.groupValues[2]
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("CoordinateDialog", "Error pasting: ${e.message}")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentPaste,
+                        contentDescription = "Paste",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Paste from Clipboard")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Latitude input
+                androidx.compose.material3.OutlinedTextField(
+                    value = latitudeText,
+                    onValueChange = { latitudeText = it },
+                    label = { Text("Latitude") },
+                    placeholder = { Text("-6.2088") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GREEN_COLOR,
+                        focusedLabelColor = GREEN_COLOR,
+                        cursorColor = GREEN_COLOR
+                    ),
+                    textStyle = TextStyle(color = Color.White)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Longitude input
+                androidx.compose.material3.OutlinedTextField(
+                    value = longitudeText,
+                    onValueChange = { longitudeText = it },
+                    label = { Text("Longitude") },
+                    placeholder = { Text("106.8456") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GREEN_COLOR,
+                        focusedLabelColor = GREEN_COLOR,
+                        cursorColor = GREEN_COLOR
+                    ),
+                    textStyle = TextStyle(color = Color.White)
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onCountryListClick,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("Country List")
+                    }
+
+                    Button(
+                        onClick = {
+                            if (latitudeText.isNotBlank() && longitudeText.isNotBlank()) {
+                                onCoordinateSubmit(latitudeText, longitudeText)
+                                onDismiss()
+                            }
+                        },
+                        enabled = latitudeText.isNotBlank() && longitudeText.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GREEN_COLOR,
+                            contentColor = Color.Black
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Set Location")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Cancel",
+                        color = Color.Gray
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ProfilePhotoSection dan LocationSection tetap sama seperti implementasi sebelumnya
 @Composable
 fun ProfilePhotoSection(
     currentProfile: com.example.purrytify.models.UserProfile?,
@@ -619,6 +836,14 @@ fun LocationSection(
                             fontSize = 12.sp
                         )
                     }
+                    if (selectedLocation.latitude != null && selectedLocation.longitude != null) {
+                        Text(
+                            text = "Coordinates: ${String.format("%.4f", selectedLocation.latitude)}, ${String.format("%.4f", selectedLocation.longitude)}",
+                            color = Color.Gray,
+                            fontFamily = FontFamily(Font(R.font.poppins_regular)),
+                            fontSize = 10.sp
+                        )
+                    }
                 }
             }
         }
@@ -672,7 +897,7 @@ fun LocationSection(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Select Manually")
+                Text("Select on Map")
             }
         }
 

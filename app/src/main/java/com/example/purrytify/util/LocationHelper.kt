@@ -24,6 +24,22 @@ import kotlinx.coroutines.withTimeout
 import java.util.Locale
 import kotlin.coroutines.resume
 
+/**
+ * Helper class untuk mengelola location-related operations
+ *
+ * Fungsi utama:
+ * 1. Auto-detect current location menggunakan GPS/Network
+ * 2. Manual location selection menggunakan Google Maps
+ * 3. Geocoding untuk convert koordinat ke country code
+ *
+ * Alur kerja location selection:
+ * 1. User tap "Select on Map"
+ * 2. Launch Google Maps dengan koordinat default
+ * 3. User pilih lokasi di Maps (tap dan hold untuk drop pin)
+ * 4. User tap "Share" atau "Copy coordinates"
+ * 5. Parse koordinat dari hasil sharing
+ * 6. Convert koordinat ke country code
+ */
 class LocationHelper(private val context: Context) {
     private val TAG = "LocationHelper"
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -37,13 +53,57 @@ class LocationHelper(private val context: Context) {
     init {
         // Initialize Places SDK
         if (!Places.isInitialized()) {
-            // Use a default API key or request it from your backend
             Places.initialize(context, "AIzaSyDNMbD-13cjo0Cbdj8EWjP3DyxBenupkbY")
         }
     }
 
     /**
-     * Fungsi untuk membuat Intent Place Autocomplete
+     * Fungsi untuk membuat Intent Google Maps untuk memilih lokasi
+     *
+     * Alur kerja:
+     * 1. Buat URI dengan format geo: yang akan membuka Maps
+     * 2. Tambahkan parameter untuk menampilkan pin di lokasi default
+     * 3. Set package ke Google Maps untuk memastikan buka di GMaps
+     * 4. Return intent yang siap diluncurkan
+     *
+     * @param currentLatitude koordinat latitude saat ini (opsional)
+     * @param currentLongitude koordinat longitude saat ini (opsional)
+     * @return Intent untuk membuka Google Maps
+     */
+    fun createGoogleMapsPickerIntent(
+        currentLatitude: Double? = null,
+        currentLongitude: Double? = null
+    ): Intent {
+        Log.d(TAG, "Creating Google Maps picker intent")
+
+        // Default ke Jakarta jika tidak ada koordinat current
+        val lat = currentLatitude ?: -6.2088
+        val lng = currentLongitude ?: 106.8456
+
+        // Buat URI untuk Google Maps dengan mode drop pin
+        // Format: geo:lat,lng?q=lat,lng(label) akan menampilkan pin di lokasi tersebut
+        val uri = "geo:$lat,$lng?q=$lat,$lng(Select+Location)"
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+
+        // Pastikan menggunakan Google Maps
+        if (isGoogleMapsAvailable()) {
+            intent.setPackage("com.google.android.apps.maps")
+            Log.d(TAG, "Using Google Maps package")
+        } else {
+            Log.w(TAG, "Google Maps not available, using default map app")
+        }
+
+        Log.d(TAG, "Created Google Maps intent with URI: $uri")
+        return intent
+    }
+
+    /**
+     * Fungsi alternatif untuk membuat intent place picker (fallback)
+     *
+     * Alur kerja:
+     * 1. Buat intent Autocomplete dengan field yang dibutuhkan
+     * 2. Set mode overlay untuk UX yang lebih baik
+     * 3. Return intent yang siap diluncurkan
      */
     fun createLocationPickerIntent(): Intent {
         Log.d(TAG, "Creating location picker intent")
@@ -67,6 +127,13 @@ class LocationHelper(private val context: Context) {
 
     /**
      * Parse hasil dari Place Autocomplete
+     *
+     * Alur kerja:
+     * 1. Cek result code (OK/ERROR/CANCELED)
+     * 2. Extract Place object dari intent data
+     * 3. Ambil address components untuk mencari country code
+     * 4. Fallback ke geocoder jika address components tidak ada
+     * 5. Return LocationResult dengan data lengkap
      */
     fun parsePlacePickerResult(resultCode: Int, data: Intent?): LocationResult? {
         Log.d(TAG, "=== PARSING PLACE PICKER RESULT ===")
@@ -130,261 +197,15 @@ class LocationHelper(private val context: Context) {
     }
 
     /**
-     * Alternatif: Buat intent untuk memilih lokasi dengan maps biasa
-     * Ini adalah fallback jika Place Picker tidak tersedia
-     */
-    fun createMapsSelectorIntent(): Intent {
-        Log.d(TAG, "Creating maps selector intent")
-
-        // Gunakan action PICK dengan data geo
-        val intent = Intent(Intent.ACTION_PICK).apply {
-            setDataAndType(Uri.parse("content://com.google.android.maps/"), "vnd.android.cursor.dir/vnd.google.android.maps")
-        }
-
-        // Jika intent tidak bisa di-resolve, gunakan VIEW action
-        if (intent.resolveActivity(context.packageManager) == null) {
-            Log.d(TAG, "ACTION_PICK not available, using ACTION_VIEW")
-            return Intent(Intent.ACTION_VIEW).apply {
-                data = Uri.parse("geo:0,0?q=")
-                setPackage("com.google.android.apps.maps")
-            }
-        }
-
-        return intent
-    }
-
-    /**
-     * Mendapatkan lokasi current user
-     */
-    suspend fun getCurrentLocation(): LocationResult? {
-        return try {
-            withTimeout(15000L) {
-                getCurrentLocationInternal()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Timeout getting location: ${e.message}")
-            null
-        }
-    }
-
-    private suspend fun getCurrentLocationInternal(): LocationResult? = suspendCancellableCoroutine { continuation ->
-        if (!hasLocationPermission()) {
-            Log.e(TAG, "Location permission not granted")
-            continuation.resume(null)
-            return@suspendCancellableCoroutine
-        }
-
-        if (!isLocationEnabled()) {
-            Log.e(TAG, "Location services disabled")
-            continuation.resume(null)
-            return@suspendCancellableCoroutine
-        }
-
-        try {
-            val lastKnownLocation = getBestLastKnownLocation()
-            if (lastKnownLocation != null && isLocationFresh(lastKnownLocation)) {
-                Log.d(TAG, "Using last known location: ${lastKnownLocation.latitude}, ${lastKnownLocation.longitude}")
-                val result = locationToCountryCode(lastKnownLocation.latitude, lastKnownLocation.longitude)
-                continuation.resume(result)
-                return@suspendCancellableCoroutine
-            }
-
-            var locationReceived = false
-            val locationListener = object : LocationListener {
-                override fun onLocationChanged(location: Location) {
-                    if (!locationReceived) {
-                        locationReceived = true
-                        Log.d(TAG, "Got location: ${location.latitude}, ${location.longitude}")
-                        locationManager.removeUpdates(this)
-                        val result = locationToCountryCode(location.latitude, location.longitude)
-                        continuation.resume(result)
-                    }
-                }
-
-                @Deprecated("Deprecated in Java")
-                override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-                override fun onProviderEnabled(provider: String) {}
-                override fun onProviderDisabled(provider: String) {}
-            }
-
-            val providers = mutableListOf<String>()
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                providers.add(LocationManager.GPS_PROVIDER)
-            }
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                providers.add(LocationManager.NETWORK_PROVIDER)
-            }
-
-            if (providers.isEmpty()) {
-                Log.e(TAG, "No location providers available")
-                continuation.resume(null)
-                return@suspendCancellableCoroutine
-            }
-
-            providers.forEach { provider ->
-                try {
-                    locationManager.requestLocationUpdates(provider, 1000L, 0f, locationListener)
-                    Log.d(TAG, "Requested updates from: $provider")
-                } catch (e: SecurityException) {
-                    Log.e(TAG, "Security exception for $provider: ${e.message}")
-                }
-            }
-
-            continuation.invokeOnCancellation {
-                try {
-                    locationManager.removeUpdates(locationListener)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error removing updates: ${e.message}")
-                }
-            }
-
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                if (!locationReceived) {
-                    locationReceived = true
-                    locationManager.removeUpdates(locationListener)
-                    val staleLocation = getBestLastKnownLocation()
-                    if (staleLocation != null) {
-                        val result = locationToCountryCode(staleLocation.latitude, staleLocation.longitude)
-                        continuation.resume(result)
-                    } else {
-                        continuation.resume(null)
-                    }
-                }
-            }, 10000L)
-
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Security exception: ${e.message}")
-            continuation.resume(null)
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception: ${e.message}")
-            continuation.resume(null)
-        }
-    }
-
-    private fun getBestLastKnownLocation(): Location? {
-        if (!hasLocationPermission()) return null
-
-        return try {
-            val locations = mutableListOf<Location>()
-
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let {
-                    locations.add(it)
-                }
-            }
-
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let {
-                    locations.add(it)
-                }
-            }
-
-            locations.maxByOrNull { it.time }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Security exception getting last known location: ${e.message}")
-            null
-        }
-    }
-
-    private fun isLocationFresh(location: Location): Boolean {
-        val age = System.currentTimeMillis() - location.time
-        return age < 5 * 60 * 1000L
-    }
-
-    private fun locationToCountryCode(latitude: Double, longitude: Double): LocationResult? {
-        if (geocoder == null) {
-            Log.e(TAG, "Geocoder not available")
-            return createFallbackLocation(latitude, longitude)
-        }
-
-        return try {
-            Log.d(TAG, "Converting coordinates: $latitude, $longitude")
-
-            var addresses: List<Address>? = null
-
-            try {
-                addresses = geocoder.getFromLocation(latitude, longitude, 1)
-            } catch (e: Exception) {
-                Log.w(TAG, "Geocoder failed: ${e.message}")
-            }
-
-            if (addresses.isNullOrEmpty()) {
-                try {
-                    val defaultGeocoder = Geocoder(context, Locale.getDefault())
-                    addresses = defaultGeocoder.getFromLocation(latitude, longitude, 1)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Default geocoder failed: ${e.message}")
-                }
-            }
-
-            if (!addresses.isNullOrEmpty()) {
-                val address = addresses[0]
-                val countryCode = address.countryCode ?: "ID"
-                val countryName = address.countryName ?: CountryCodeHelper.getCountryName(countryCode)
-                val fullAddress = address.getAddressLine(0)
-
-                Log.d(TAG, "Location resolved: $countryName ($countryCode)")
-
-                LocationResult(
-                    countryCode = countryCode,
-                    countryName = countryName,
-                    address = fullAddress,
-                    latitude = latitude,
-                    longitude = longitude
-                )
-            } else {
-                Log.w(TAG, "No address found, using fallback")
-                createFallbackLocation(latitude, longitude)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error converting location: ${e.message}")
-            createFallbackLocation(latitude, longitude)
-        }
-    }
-
-    private fun createFallbackLocation(latitude: Double, longitude: Double): LocationResult? {
-        return if (isCoordinatesInIndonesia(latitude, longitude)) {
-            LocationResult(
-                countryCode = "ID",
-                countryName = "Indonesia",
-                address = "Location in Indonesia",
-                latitude = latitude,
-                longitude = longitude
-            )
-        } else {
-            null
-        }
-    }
-
-    private fun isCoordinatesInIndonesia(latitude: Double, longitude: Double): Boolean {
-        return latitude >= -11.0 && latitude <= 6.0 && longitude >= 95.0 && longitude <= 141.0
-    }
-
-    /**
-     * Create Google Maps intent
-     */
-    fun createGoogleMapsIntent(currentLatitude: Double? = null, currentLongitude: Double? = null): Intent {
-        Log.d(TAG, "Creating Google Maps intent")
-
-        val lat = currentLatitude ?: -6.2088
-        val lng = currentLongitude ?: 106.8456
-
-        val uri = "geo:$lat,$lng?q=$lat,$lng"
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
-
-        if (isGoogleMapsAvailable()) {
-            intent.setPackage("com.google.android.apps.maps")
-            Log.d(TAG, "Using Google Maps package")
-        } else {
-            Log.d(TAG, "Google Maps not available")
-        }
-
-        Log.d(TAG, "Created intent with URI: $uri")
-        return intent
-    }
-
-    /**
-     * Parse Google Maps result
+     * Parse hasil dari Google Maps (sharing coordinates)
+     *
+     * Alur kerja:
+     * 1. Cek apakah ada data di intent
+     * 2. Extract URI dari intent data
+     * 3. Parse berbagai format URI coordinate (geo:, google maps URL, dll)
+     * 4. Validasi koordinat yang ditemukan
+     * 5. Convert ke country code menggunakan geocoder
+     * 6. Return LocationResult atau null jika parsing gagal
      */
     fun parseGoogleMapsResult(data: Intent?): LocationResult? {
         Log.d(TAG, "=== PARSING GOOGLE MAPS RESULT ===")
@@ -435,6 +256,17 @@ class LocationHelper(private val context: Context) {
                 }
             }
 
+            // Pattern 4: ll=lat,lng (alternative Google Maps format)
+            if (latitude == null || longitude == null) {
+                val llPattern = Regex("ll=(-?\\d+(?:\\.\\d+)?),(-?\\d+(?:\\.\\d+)?)")
+                llPattern.find(uriString)?.let { match ->
+                    latitude = match.groupValues[1].toDoubleOrNull()
+                    longitude = match.groupValues[2].toDoubleOrNull()
+                    Log.d(TAG, "Found ll pattern: $latitude, $longitude")
+                }
+            }
+
+            // Validasi koordinat
             if (latitude != null && longitude != null &&
                 latitude!! >= -90.0 && latitude!! <= 90.0 &&
                 longitude!! >= -180.0 && longitude!! <= 180.0) {
@@ -453,7 +285,243 @@ class LocationHelper(private val context: Context) {
     }
 
     /**
-     * Check Google Maps availability
+     * Mendapatkan lokasi current user menggunakan GPS/Network
+     *
+     * Alur kerja:
+     * 1. Cek permission dan location service
+     * 2. Coba ambil last known location yang masih fresh
+     * 3. Jika tidak ada, request location update dari GPS/Network
+     * 4. Convert koordinat ke country code
+     * 5. Return LocationResult dengan timeout 15 detik
+     */
+    suspend fun getCurrentLocation(): LocationResult? {
+        return try {
+            withTimeout(15000L) {
+                getCurrentLocationInternal()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Timeout getting location: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Implementation internal untuk getCurrentLocation
+     */
+    private suspend fun getCurrentLocationInternal(): LocationResult? = suspendCancellableCoroutine { continuation ->
+        if (!hasLocationPermission()) {
+            Log.e(TAG, "Location permission not granted")
+            continuation.resume(null)
+            return@suspendCancellableCoroutine
+        }
+
+        if (!isLocationEnabled()) {
+            Log.e(TAG, "Location services disabled")
+            continuation.resume(null)
+            return@suspendCancellableCoroutine
+        }
+
+        try {
+            // Cek last known location dulu
+            val lastKnownLocation = getBestLastKnownLocation()
+            if (lastKnownLocation != null && isLocationFresh(lastKnownLocation)) {
+                Log.d(TAG, "Using last known location: ${lastKnownLocation.latitude}, ${lastKnownLocation.longitude}")
+                val result = locationToCountryCode(lastKnownLocation.latitude, lastKnownLocation.longitude)
+                continuation.resume(result)
+                return@suspendCancellableCoroutine
+            }
+
+            // Request location update
+            var locationReceived = false
+            val locationListener = object : LocationListener {
+                override fun onLocationChanged(location: Location) {
+                    if (!locationReceived) {
+                        locationReceived = true
+                        Log.d(TAG, "Got location: ${location.latitude}, ${location.longitude}")
+                        locationManager.removeUpdates(this)
+                        val result = locationToCountryCode(location.latitude, location.longitude)
+                        continuation.resume(result)
+                    }
+                }
+
+                @Deprecated("Deprecated in Java")
+                override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+                override fun onProviderEnabled(provider: String) {}
+                override fun onProviderDisabled(provider: String) {}
+            }
+
+            // Setup providers
+            val providers = mutableListOf<String>()
+            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                providers.add(LocationManager.GPS_PROVIDER)
+            }
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                providers.add(LocationManager.NETWORK_PROVIDER)
+            }
+
+            if (providers.isEmpty()) {
+                Log.e(TAG, "No location providers available")
+                continuation.resume(null)
+                return@suspendCancellableCoroutine
+            }
+
+            // Request updates dari semua provider yang tersedia
+            providers.forEach { provider ->
+                try {
+                    locationManager.requestLocationUpdates(provider, 1000L, 0f, locationListener)
+                    Log.d(TAG, "Requested updates from: $provider")
+                } catch (e: SecurityException) {
+                    Log.e(TAG, "Security exception for $provider: ${e.message}")
+                }
+            }
+
+            // Cleanup pada cancellation
+            continuation.invokeOnCancellation {
+                try {
+                    locationManager.removeUpdates(locationListener)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing updates: ${e.message}")
+                }
+            }
+
+            // Timeout handler - fallback ke stale location
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (!locationReceived) {
+                    locationReceived = true
+                    locationManager.removeUpdates(locationListener)
+                    val staleLocation = getBestLastKnownLocation()
+                    if (staleLocation != null) {
+                        val result = locationToCountryCode(staleLocation.latitude, staleLocation.longitude)
+                        continuation.resume(result)
+                    } else {
+                        continuation.resume(null)
+                    }
+                }
+            }, 10000L) // 10 second timeout
+
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Security exception: ${e.message}")
+            continuation.resume(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception: ${e.message}")
+            continuation.resume(null)
+        }
+    }
+
+    /**
+     * Convert koordinat latitude/longitude ke country code
+     *
+     * Alur kerja:
+     * 1. Cek apakah Geocoder tersedia
+     * 2. Coba reverse geocoding dengan locale Indonesia
+     * 3. Fallback ke default locale jika gagal
+     * 4. Extract country code dan name dari address
+     * 5. Return LocationResult atau fallback ke Indonesia
+     */
+    private fun locationToCountryCode(latitude: Double, longitude: Double): LocationResult? {
+        if (geocoder == null) {
+            Log.e(TAG, "Geocoder not available")
+            return createFallbackLocation(latitude, longitude)
+        }
+
+        return try {
+            Log.d(TAG, "Converting coordinates: $latitude, $longitude")
+
+            var addresses: List<Address>? = null
+
+            // Coba dengan geocoder Indonesia
+            try {
+                addresses = geocoder.getFromLocation(latitude, longitude, 1)
+            } catch (e: Exception) {
+                Log.w(TAG, "Geocoder failed: ${e.message}")
+            }
+
+            // Fallback ke default geocoder
+            if (addresses.isNullOrEmpty()) {
+                try {
+                    val defaultGeocoder = Geocoder(context, Locale.getDefault())
+                    addresses = defaultGeocoder.getFromLocation(latitude, longitude, 1)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Default geocoder failed: ${e.message}")
+                }
+            }
+
+            if (!addresses.isNullOrEmpty()) {
+                val address = addresses[0]
+                val countryCode = address.countryCode ?: "ID"
+                val countryName = address.countryName ?: CountryCodeHelper.getCountryName(countryCode)
+                val fullAddress = address.getAddressLine(0)
+
+                Log.d(TAG, "Location resolved: $countryName ($countryCode)")
+
+                LocationResult(
+                    countryCode = countryCode,
+                    countryName = countryName,
+                    address = fullAddress,
+                    latitude = latitude,
+                    longitude = longitude
+                )
+            } else {
+                Log.w(TAG, "No address found, using fallback")
+                createFallbackLocation(latitude, longitude)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error converting location: ${e.message}")
+            createFallbackLocation(latitude, longitude)
+        }
+    }
+
+    // Helper functions
+    private fun getBestLastKnownLocation(): Location? {
+        if (!hasLocationPermission()) return null
+
+        return try {
+            val locations = mutableListOf<Location>()
+
+            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let {
+                    locations.add(it)
+                }
+            }
+
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let {
+                    locations.add(it)
+                }
+            }
+
+            locations.maxByOrNull { it.time }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Security exception getting last known location: ${e.message}")
+            null
+        }
+    }
+
+    private fun isLocationFresh(location: Location): Boolean {
+        val age = System.currentTimeMillis() - location.time
+        return age < 5 * 60 * 1000L // 5 minutes
+    }
+
+    private fun createFallbackLocation(latitude: Double, longitude: Double): LocationResult? {
+        return if (isCoordinatesInIndonesia(latitude, longitude)) {
+            LocationResult(
+                countryCode = "ID",
+                countryName = "Indonesia",
+                address = "Location in Indonesia",
+                latitude = latitude,
+                longitude = longitude
+            )
+        } else {
+            null
+        }
+    }
+
+    private fun isCoordinatesInIndonesia(latitude: Double, longitude: Double): Boolean {
+        return latitude >= -11.0 && latitude <= 6.0 && longitude >= 95.0 && longitude <= 141.0
+    }
+
+    /**
+     * Check apakah Google Maps tersedia di device
      */
     fun isGoogleMapsAvailable(): Boolean {
         return try {
@@ -479,6 +547,43 @@ class LocationHelper(private val context: Context) {
     fun isLocationEnabled(): Boolean {
         return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
                 locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    }
+
+    /**
+     * Parse coordinate string yang diinput manual oleh user
+     *
+     * Alur kerja:
+     * 1. Validate format latitude dan longitude
+     * 2. Convert ke double dan validate range
+     * 3. Convert ke country code menggunakan geocoder
+     * 4. Return LocationResult atau null jika invalid
+     */
+    fun parseCoordinateString(latitudeStr: String, longitudeStr: String): LocationResult? {
+        return try {
+            val latitude = latitudeStr.toDouble()
+            val longitude = longitudeStr.toDouble()
+
+            // Validate coordinate ranges
+            if (latitude < -90.0 || latitude > 90.0) {
+                Log.e(TAG, "Invalid latitude: $latitude")
+                return null
+            }
+
+            if (longitude < -180.0 || longitude > 180.0) {
+                Log.e(TAG, "Invalid longitude: $longitude")
+                return null
+            }
+
+            Log.d(TAG, "Parsing coordinates: $latitude, $longitude")
+            locationToCountryCode(latitude, longitude)
+
+        } catch (e: NumberFormatException) {
+            Log.e(TAG, "Invalid coordinate format: ${e.message}")
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing coordinates: ${e.message}")
+            null
+        }
     }
 
     companion object {
