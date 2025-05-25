@@ -32,6 +32,9 @@ import coil.request.ImageRequest
 import com.example.purrytify.models.RecommendationPlaylist
 import com.example.purrytify.models.Song
 import com.example.purrytify.ui.theme.GREEN_COLOR
+import com.example.purrytify.viewmodels.MainViewModel
+import com.example.purrytify.viewmodels.PlaylistContext
+import com.example.purrytify.viewmodels.PlaylistType
 import java.io.File
 
 @Composable
@@ -41,7 +44,8 @@ fun RecommendationSection(
     onSongClick: (Song) -> Unit,
     onRefreshClick: () -> Unit,
     isLoading: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    mainViewModel: MainViewModel? = null // ADD: MainViewModel parameter
 ) {
     Column(modifier = modifier) {
         // Section header with gradient background
@@ -168,7 +172,8 @@ fun RecommendationSection(
                 items(recommendations.take(4)) { playlist -> // Show max 4 playlists
                     EnhancedRecommendationPlaylistCard(
                         playlist = playlist,
-                        onClick = { onPlaylistClick(playlist) }
+                        onClick = { onPlaylistClick(playlist) },
+                        mainViewModel = mainViewModel // PASS MainViewModel
                     )
                 }
             }
@@ -180,13 +185,17 @@ fun RecommendationSection(
 fun EnhancedRecommendationPlaylistCard(
     playlist: RecommendationPlaylist,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    mainViewModel: MainViewModel? = null // MainViewModel parameter (not used for direct play)
 ) {
     Card(
         modifier = modifier
             .fillMaxWidth()
             .height(130.dp)
-            .clickable { onClick() },
+            .clickable {
+                // FIXED: Always open playlist view first, don't auto-play
+                onClick()
+            },
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF1A1A1A)
         ),
@@ -296,7 +305,23 @@ fun EnhancedRecommendationPlaylistCard(
                 contentAlignment = Alignment.BottomEnd
             ) {
                 Surface(
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clickable {
+                            // UPDATED: Play button for auto-play functionality
+                            if (mainViewModel != null && playlist.songs.isNotEmpty()) {
+                                // Create playlist context
+                                val playlistContext = PlaylistContext(
+                                    type = PlaylistType.RECOMMENDATION_PLAYLIST,
+                                    songs = playlist.songs,
+                                    title = playlist.title,
+                                    id = playlist.id
+                                )
+
+                                // Play first song with playlist context
+                                mainViewModel.playSongWithPlaylist(playlist.songs.first(), playlistContext)
+                            }
+                        },
                     shape = RoundedCornerShape(14.dp),
                     color = GREEN_COLOR,
                     shadowElevation = 4.dp
@@ -323,7 +348,8 @@ fun RecommendationPlaylistView(
     onSongClick: (Song) -> Unit,
     onAddToQueue: (Song) -> Unit,
     onBackClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    mainViewModel: MainViewModel? = null // ADD: MainViewModel parameter
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize()
@@ -421,32 +447,70 @@ fun RecommendationPlaylistView(
 
                         Spacer(modifier = Modifier.width(16.dp))
 
-                        Column {
-                            Text(
-                                text = "PLAYLIST",
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    text = "PLAYLIST",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
 
-                            Text(
-                                text = playlist.title,
-                                color = Color.White,
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                                Text(
+                                    text = playlist.title,
+                                    color = Color.White,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
 
-                            Text(
-                                text = playlist.description,
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 14.sp
-                            )
+                                Text(
+                                    text = playlist.description,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 14.sp
+                                )
 
-                            Text(
-                                text = "${playlist.songs.size} songs",
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 12.sp
-                            )
+                                Text(
+                                    text = "${playlist.songs.size} songs",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontSize = 12.sp
+                                )
+                            }
+
+                            // Large Play Button
+                            if (mainViewModel != null && playlist.songs.isNotEmpty()) {
+                                Surface(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clickable {
+                                            // Auto-play first song with playlist context
+                                            val playlistContext = PlaylistContext(
+                                                type = PlaylistType.RECOMMENDATION_PLAYLIST,
+                                                songs = playlist.songs,
+                                                title = playlist.title,
+                                                id = playlist.id
+                                            )
+                                            mainViewModel.playSongWithPlaylist(playlist.songs.first(), playlistContext)
+                                        },
+                                    shape = RoundedCornerShape(28.dp),
+                                    color = GREEN_COLOR,
+                                    shadowElevation = 8.dp
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "Play Playlist",
+                                            tint = Color.Black,
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -456,7 +520,24 @@ fun RecommendationPlaylistView(
         items(playlist.songs) { song ->
             SongItem(
                 song = song,
-                onSongClick = onSongClick,
+                onSongClick = { clickedSong ->
+                    // UPDATED: Use playlist context when MainViewModel is available
+                    if (mainViewModel != null) {
+                        // Create playlist context
+                        val playlistContext = PlaylistContext(
+                            type = PlaylistType.RECOMMENDATION_PLAYLIST,
+                            songs = playlist.songs,
+                            title = playlist.title,
+                            id = playlist.id
+                        )
+
+                        // Play with playlist context
+                        mainViewModel.playSongWithPlaylist(clickedSong, playlistContext)
+                    } else {
+                        // Fallback to original behavior
+                        onSongClick(clickedSong)
+                    }
+                },
                 onAddToQueue = onAddToQueue
             )
         }

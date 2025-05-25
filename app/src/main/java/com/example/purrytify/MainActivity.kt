@@ -49,7 +49,6 @@ import com.example.purrytify.ui.navigation.AppNavigation
 import com.example.purrytify.ui.screens.LoginScreen
 import com.example.purrytify.ui.screens.PlayerScreen
 import com.example.purrytify.ui.theme.PurrytifyTheme
-import com.example.purrytify.util.AudioDeviceManager
 import com.example.purrytify.util.EventBus
 import com.example.purrytify.util.NetworkConnectionObserver
 import com.example.purrytify.util.TokenManager
@@ -61,7 +60,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.example.purrytify.util.SongDownloadManager
 import com.example.purrytify.util.NotificationPermissionHandler
-import com.example.purrytify.util.AudioRoutingManager
 
 class MainActivity : ComponentActivity() {
     private val TAG = "MainActivity"
@@ -75,7 +73,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var songCompletionReceiver: SongCompletionReceiver
     private lateinit var localBroadcastManager: LocalBroadcastManager
     private lateinit var downloadManager: SongDownloadManager
-    private lateinit var audioRoutingManager: AudioRoutingManager
+
     private lateinit var mediaButtonActionReceiver: BroadcastReceiver
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -317,22 +315,6 @@ class MainActivity : ComponentActivity() {
 
             withContext(Dispatchers.Main) {
                 try {
-                    audioRoutingManager = AudioRoutingManager(
-                        applicationContext,
-                        AudioDeviceManager(applicationContext)
-                    )
-
-                    // Apply stored routing saat app startup
-                    audioRoutingManager.applyStoredRouting()
-
-                    Log.d(TAG, "AudioRoutingManager initialized")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error initializing AudioRoutingManager", e)
-                }
-            }
-
-            withContext(Dispatchers.Main) {
-                try {
                     songCompletionReceiver = SongCompletionReceiver(mainViewModel)
                     localBroadcastManager.registerReceiver(
                         songCompletionReceiver,
@@ -450,18 +432,6 @@ class MainActivity : ComponentActivity() {
                 startTokenRefreshService()
             }
         }
-
-        if (::audioRoutingManager.isInitialized) {
-            audioRoutingManager.onAppResume()
-        }
-    }
-
-    override fun onPause() {
-        super.onPause()
-
-        if (::audioRoutingManager.isInitialized) {
-            audioRoutingManager.onAppPause()
-        }
     }
 
     override fun onDestroy() {
@@ -482,11 +452,6 @@ class MainActivity : ComponentActivity() {
         networkConnectionObserver.stop()
         stopTokenRefreshService()
         mainViewModel.unbindService(this)
-
-        // Cleanup audio routing manager
-        if (::audioRoutingManager.isInitialized) {
-            audioRoutingManager.stopMonitoring()
-        }
 
         // Release download manager resources
         if (::downloadManager.isInitialized) {

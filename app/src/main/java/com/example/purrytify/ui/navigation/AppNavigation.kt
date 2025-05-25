@@ -23,6 +23,8 @@ import androidx.compose.runtime.getValue
 import com.example.purrytify.ui.screens.AnalyticsScreen
 import com.example.purrytify.ui.screens.AudioDeviceScreen
 import com.example.purrytify.viewmodels.MainViewModel
+import com.example.purrytify.viewmodels.PlaylistContext
+import com.example.purrytify.viewmodels.PlaylistType
 
 object Destinations {
     const val HOME_ROUTE = "home"
@@ -83,19 +85,14 @@ fun AppNavigation(
         composable(Destinations.ANALYTICS_ROUTE) {
             AnalyticsScreen(navController = navController)
         }
-        composable(Destinations.QUEUE_ROUTE) {
-            QueueScreen(
-                onNavigateBack = { navController.popBackStack() },
-                mainViewModel = mainViewModel
-            )
-        }
         composable(Destinations.ONLINE_SONGS_ROUTE) {
             OnlineSongsScreen(
                 onSongSelected = { onlineSong ->
+                    // UPDATED: Convert OnlineSong to Song and use playSong for backward compatibility
                     val song = onlineSong.toSong()
-                    // Use unified playSong method
                     mainViewModel.playSong(song)
-                }
+                },
+                mainViewModel = mainViewModel // PASS MainViewModel
             )
         }
         composable(Destinations.QR_SCANNER_ROUTE) {
@@ -106,7 +103,6 @@ fun AppNavigation(
                     if (songId != null) {
                         // Navigate back and handle deep link
                         navController.popBackStack()
-
 
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(qrCode))
                         context.startActivity(intent)
@@ -122,9 +118,9 @@ fun AppNavigation(
             )
         }
         composable(Destinations.AUDIO_DEVICES_ROUTE) {
-                AudioDeviceScreen(
-                    onBackClick = { navController.popBackStack() }
-                )
+            AudioDeviceScreen(
+                onBackClick = { navController.popBackStack() }
+            )
         }
     }
 }

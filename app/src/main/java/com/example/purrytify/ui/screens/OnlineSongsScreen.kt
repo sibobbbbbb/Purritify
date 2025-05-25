@@ -32,13 +32,17 @@ import com.example.purrytify.viewmodels.OnlineSongsViewModelFactory
 import kotlinx.coroutines.launch
 import com.example.purrytify.viewmodels.LibraryViewModel
 import com.example.purrytify.viewmodels.ViewModelFactory
+import com.example.purrytify.viewmodels.MainViewModel
+import com.example.purrytify.viewmodels.PlaylistContext
+import com.example.purrytify.viewmodels.PlaylistType
 
 @Composable
 fun OnlineSongsScreen(
     onSongSelected: (OnlineSong) -> Unit,
     viewModel: OnlineSongsViewModel = viewModel(
         factory = OnlineSongsViewModelFactory(LocalContext.current)
-    )
+    ),
+    mainViewModel: MainViewModel? = null // ADD: MainViewModel parameter
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -183,7 +187,25 @@ fun OnlineSongsScreen(
                                     showRank = true,
                                     rank = index + 1,
                                     onSongClick = { clickedSong ->
-                                        onSongSelected(clickedSong)
+                                        // UPDATED: Use playlist context when MainViewModel is available
+                                        if (mainViewModel != null) {
+                                            // Convert OnlineSong to Song
+                                            val songModel = clickedSong.toSong()
+
+                                            // Create playlist context for Global Top 50
+                                            val playlistContext = PlaylistContext(
+                                                type = PlaylistType.GLOBAL_TOP_50,
+                                                songs = globalTopSongs.map { it.toSong() },
+                                                title = "Global Top 50",
+                                                id = "global_top_50"
+                                            )
+
+                                            // Play with playlist context
+                                            mainViewModel.playSongWithPlaylist(songModel, playlistContext)
+                                        } else {
+                                            // Fallback to original behavior
+                                            onSongSelected(clickedSong)
+                                        }
                                     },
                                     onDownloadClick = { clickedSong ->
                                         if (!isDownloaded && !isDownloading) {
@@ -246,7 +268,25 @@ fun OnlineSongsScreen(
                                     showRank = true,
                                     rank = index + 1,
                                     onSongClick = { clickedSong ->
-                                        onSongSelected(clickedSong)
+                                        // UPDATED: Use playlist context when MainViewModel is available
+                                        if (mainViewModel != null) {
+                                            // Convert OnlineSong to Song
+                                            val songModel = clickedSong.toSong()
+
+                                            // Create playlist context for Country Top 10
+                                            val playlistContext = PlaylistContext(
+                                                type = PlaylistType.COUNTRY_TOP_10,
+                                                songs = countryTopSongs.map { it.toSong() },
+                                                title = "Country Top 10",
+                                                id = "country_top_10"
+                                            )
+
+                                            // Play with playlist context
+                                            mainViewModel.playSongWithPlaylist(songModel, playlistContext)
+                                        } else {
+                                            // Fallback to original behavior
+                                            onSongSelected(clickedSong)
+                                        }
                                     },
                                     onDownloadClick = { clickedSong ->
                                         if (!isDownloaded && !isDownloading) {

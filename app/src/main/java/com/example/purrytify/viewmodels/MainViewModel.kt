@@ -26,6 +26,21 @@ import com.example.purrytify.data.repository.AnalyticsRepository
 import com.example.purrytify.service.AnalyticsService
 import com.example.purrytify.util.TokenManager
 
+// ADD: Playlist context data class
+data class PlaylistContext(
+    val type: PlaylistType,
+    val songs: List<Song>,
+    val title: String = "",
+    val id: String? = null
+)
+
+enum class PlaylistType {
+    LIBRARY,
+    GLOBAL_TOP_50,
+    COUNTRY_TOP_10,
+    RECOMMENDATION_PLAYLIST,
+    QUEUE_MANUAL // When user manually adds songs to queue
+}
 
 class MainViewModel(private val songRepository: SongRepository, private val analyticsRepository: AnalyticsRepository, private val tokenManager: TokenManager) : ViewModel() {
     private val TAG = "MainViewModel"
@@ -49,6 +64,14 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
     // Queue for songs (bonus feature)
     private val _queue = MutableStateFlow<List<Song>>(emptyList())
     val queue: StateFlow<List<Song>> = _queue
+
+    // ADD: Current playlist context
+    private val _currentPlaylistContext = MutableStateFlow<PlaylistContext?>(null)
+    val currentPlaylistContext: StateFlow<PlaylistContext?> = _currentPlaylistContext
+
+    // ADD: Current index in the playlist
+    private val _currentPlaylistIndex = MutableStateFlow(-1)
+    val currentPlaylistIndex: StateFlow<Int> = _currentPlaylistIndex
 
     // All songs from repository (for navigation when no queue is set)
     private val _allSongs = MutableStateFlow<List<Song>>(emptyList())
@@ -440,6 +463,40 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
         }
     }
 
+    // ADD: New method to play song with playlist context
+    fun playSongWithPlaylist(song: Song, playlistContext: PlaylistContext) {
+        Log.d(TAG, "Playing song: ${song.title} from playlist: ${playlistContext.title} (${playlistContext.type})")
+
+        // Set the playlist context
+        _currentPlaylistContext.value = playlistContext
+
+        // Find the index of the song in the playlist
+        val songIndex = playlistContext.songs.indexOfFirst { it.id == song.id }
+        _currentPlaylistIndex.value = songIndex
+
+        Log.d(TAG, "Song index in playlist: $songIndex")
+
+        // Reset history when manually selecting a song from a playlist
+        _playHistory.value = emptyList()
+
+        // Clear existing queue since we're now following a playlist
+        _queue.value = emptyList()
+
+        // Play the song
+        mediaPlayerService?.playSong(song)
+        _currentSong.value = song
+        _isPlaying.value = true
+
+        viewModelScope.launch {
+            // Online songs don't need to update database timestamp
+            if (!song.isOnline && song.id > 0) {
+                Log.d(TAG, "Updating last played timestamp for offline song ${song.id}")
+                songRepository.updateLastPlayed(song.id)
+            } else {
+                Log.d(TAG, "Skipping last played update for online song: ${song.title}")
+            }
+        }
+    }
 
     fun playSong(song: Song) {
         Log.d(TAG, "Playing song: ${song.title}, isOnline: ${song.isOnline}")
@@ -447,6 +504,9 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
         // Reset history when manually selecting a song
         _playHistory.value = emptyList()
 
+        // Clear playlist context since this is a direct song play
+        _currentPlaylistContext.value = null
+        _currentPlaylistIndex.value = -1
 
         mediaPlayerService?.playSong(song)
 
@@ -458,7 +518,6 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
             // Update queue
             _queue.value = listOf(song)
             _currentQueueIndex.value = 0
-
 
             // Online songs don't need to update database timestamp
             if (!song.isOnline && song.id > 0) {
@@ -577,17 +636,187 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
         }
     }
 
-    // Play next song
+    // UPDATED: Play next song with playlist context awareness
     fun playNext() {
         Log.d(TAG, "Play next requested")
 
+        // Check if we have a playlist context
+        val playlistContext = _currentPlaylistContext.value
+        if (playlistContext != null) {
+            Log.d(TAG, "Using playlist context for next song: ${playlistContext.title} (${playlistContext.type})")
+            playNextFromPlaylist(playlistContext)
+        }
         // Check if we have an active queue
-        if (_queue.value.isNotEmpty()) {
+        else if (_queue.value.isNotEmpty()) {
             Log.d(TAG, "Using queue for next song (queue size: ${_queue.value.size})")
             playNextFromQueue()
         } else {
             Log.d(TAG, "Queue is empty, using all songs for next song")
             playNextFromAllSongs()
+        }
+    }
+
+    // ADD: Play next song from current playlist
+    private fun playNextFromPlaylist(playlistContext: PlaylistContext) {
+        val currentIndex = _currentPlaylistIndex.value
+        val playlistSongs = playlistContext.songs
+
+        if (playlistSongs.isEmpty()) {
+            Log.d(TAG, "Playlist is empty, cannot play next")
+            return
+        }
+
+        val currentSong = _currentSong.value
+
+        // Add current song to history
+        currentSong?.let { song ->
+            val updatedHistory = _playHistory.value.toMutableList()
+            updatedHistory.add(song)
+            _playHistory.value = updatedHistory
+            Log.d(TAG, "Added current song to history, history size: ${updatedHistory.size}")
+        }
+
+        // Determine next index based on repeat mode
+        val nextIndex = when (_repeatMode.value) {
+            1 -> {
+                // Repeat All - wrap around to beginning if at end
+                if (currentIndex >= playlistSongs.size - 1) 0 else currentIndex + 1
+            }
+            2 -> {
+                // Repeat One - stay on current song
+                currentIndex
+            }
+            else -> {
+                // No repeat - stop at end
+                if (currentIndex >= playlistSongs.size - 1) {
+                    Log.d(TAG, "End of playlist reached without repeat mode, stopping playback")
+                    stopCurrentPlayback()
+                    return
+                } else {
+                    currentIndex + 1
+                }
+            }
+        }
+
+        // Play the next song
+        playlistSongs.getOrNull(nextIndex)?.let { nextSong ->
+            Log.d(TAG, "Playing next song from playlist: ${nextSong.title} (index: $nextIndex)")
+
+            _currentPlaylistIndex.value = nextIndex
+            _currentSong.value = nextSong
+            _isPlaying.value = true
+
+            // Play using the media player service
+            mediaPlayerService?.playSong(nextSong)
+
+            // Update last played if not online
+            viewModelScope.launch {
+                if (!nextSong.isOnline && nextSong.id > 0) {
+                    songRepository.updateLastPlayed(nextSong.id)
+                }
+            }
+        } ?: run {
+            Log.d(TAG, "No song found in playlist at index $nextIndex")
+            stopCurrentPlayback()
+        }
+    }
+
+    // UPDATED: Play previous song with playlist context awareness
+    fun playPrevious() {
+        Log.d(TAG, "Play previous requested")
+        Log.d(TAG, "DEBUG_QUEUE: playPrevious called, queue size: ${_queue.value.size}, history size: ${_playHistory.value.size}")
+
+        // If we're more than 3 seconds into the song, restart it instead of going to previous
+        if (_currentPosition.value > 3000) {
+            Log.d(TAG, "More than 3 seconds into song, restarting current song")
+            mediaPlayerService?.seekTo(0)
+            return
+        }
+
+        // Check if we have a playlist context
+        val playlistContext = _currentPlaylistContext.value
+        if (playlistContext != null) {
+            Log.d(TAG, "Using playlist context for previous song: ${playlistContext.title} (${playlistContext.type})")
+            playPreviousFromPlaylist(playlistContext)
+            return
+        }
+
+        // Jika history memiliki lagu (artinya kita pernah memutar lagu sebelumnya)
+        if (_playHistory.value.isNotEmpty()) {
+            Log.d(TAG, "DEBUG_QUEUE: Using history for previous song, history size: ${_playHistory.value.size}")
+            playPreviousFromHistory()
+            return
+        }
+
+        // Jika queue memiliki lebih dari 1 lagu (kasus normal)
+        if (_queue.value.size > 1) {
+            Log.d(TAG, "DEBUG_QUEUE: Using queue for previous song, queue size: ${_queue.value.size}")
+            playPreviousFromQueue()
+            return
+        }
+
+        // Jika tidak ada history dan queue hanya berisi 1 lagu, gunakan navigasi semua lagu
+        Log.d(TAG, "DEBUG_QUEUE: No history and queue has only current song, using all songs navigation")
+        playPreviousFromAllSongs()
+    }
+
+    // ADD: Play previous song from current playlist
+    private fun playPreviousFromPlaylist(playlistContext: PlaylistContext) {
+        val currentIndex = _currentPlaylistIndex.value
+        val playlistSongs = playlistContext.songs
+
+        if (playlistSongs.isEmpty()) {
+            Log.d(TAG, "Playlist is empty, cannot play previous")
+            return
+        }
+
+        // If we have history, use it first
+        if (_playHistory.value.isNotEmpty()) {
+            playPreviousFromHistory()
+            return
+        }
+
+        // Determine previous index based on repeat mode
+        val prevIndex = when (_repeatMode.value) {
+            1 -> {
+                // Repeat All - wrap around to end if at beginning
+                if (currentIndex <= 0) playlistSongs.size - 1 else currentIndex - 1
+            }
+            2 -> {
+                // Repeat One - stay on current song
+                currentIndex
+            }
+            else -> {
+                // No repeat - stop at beginning
+                if (currentIndex <= 0) {
+                    Log.d(TAG, "At beginning of playlist without repeat mode, restarting current song")
+                    mediaPlayerService?.seekTo(0)
+                    return
+                } else {
+                    currentIndex - 1
+                }
+            }
+        }
+
+        // Play the previous song
+        playlistSongs.getOrNull(prevIndex)?.let { prevSong ->
+            Log.d(TAG, "Playing previous song from playlist: ${prevSong.title} (index: $prevIndex)")
+
+            _currentPlaylistIndex.value = prevIndex
+            _currentSong.value = prevSong
+            _isPlaying.value = true
+
+            // Play using the media player service
+            mediaPlayerService?.playSong(prevSong)
+
+            // Update last played if not online
+            viewModelScope.launch {
+                if (!prevSong.isOnline && prevSong.id > 0) {
+                    songRepository.updateLastPlayed(prevSong.id)
+                }
+            }
+        } ?: run {
+            Log.d(TAG, "No song found in playlist at index $prevIndex")
         }
     }
 
@@ -647,6 +876,7 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
             playNextFromAllSongs()
         }
     }
+
     // Play next song from all songs if no queue is active
     private fun playNextFromAllSongs() {
         // Lazily load all songs if they haven't been loaded yet
@@ -768,6 +998,10 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
                 Log.d(TAG, "  - onlineId: ${song.onlineId}")
                 Log.d(TAG, "  - title: ${song.title}")
 
+                // Clear playlist context since this is a direct online song play
+                _currentPlaylistContext.value = null
+                _currentPlaylistIndex.value = -1
+
                 _currentSong.value = song
                 _isPlaying.value = false // Will be set to true by service
 
@@ -830,37 +1064,6 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
         mediaPlayerService?.resetEndOfPlaybackFlag()
 
         Log.d(TAG, "Playback stopped and state reset to normal")
-    }
-
-    // Play previous song
-    fun playPrevious() {
-        Log.d(TAG, "Play previous requested")
-        Log.d(TAG, "DEBUG_QUEUE: playPrevious called, queue size: ${_queue.value.size}, history size: ${_playHistory.value.size}")
-
-        // If we're more than 3 seconds into the song, restart it instead of going to previous
-        if (_currentPosition.value > 3000) {
-            Log.d(TAG, "More than 3 seconds into song, restarting current song")
-            mediaPlayerService?.seekTo(0)
-            return
-        }
-
-        // Jika history memiliki lagu (artinya kita pernah memutar lagu sebelumnya)
-        if (_playHistory.value.isNotEmpty()) {
-            Log.d(TAG, "DEBUG_QUEUE: Using history for previous song, history size: ${_playHistory.value.size}")
-            playPreviousFromHistory()
-            return
-        }
-
-        // Jika queue memiliki lebih dari 1 lagu (kasus normal)
-        if (_queue.value.size > 1) {
-            Log.d(TAG, "DEBUG_QUEUE: Using queue for previous song, queue size: ${_queue.value.size}")
-            playPreviousFromQueue()
-            return
-        }
-
-        // Jika tidak ada history dan queue hanya berisi 1 lagu, gunakan navigasi semua lagu
-        Log.d(TAG, "DEBUG_QUEUE: No history and queue has only current song, using all songs navigation")
-        playPreviousFromAllSongs()
     }
 
     // Play previous song from the active queue
@@ -939,7 +1142,6 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
         _isPlaying.value = true
         mediaPlayerService?.playSong(previousSong)
     }
-
 
     // Play previous song from all songs if no queue is active
     private fun playPreviousFromAllSongs() {
@@ -1103,6 +1305,16 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
         currentQueue.add(song)
         _queue.value = currentQueue
 
+        // UPDATED: Clear playlist context when manually adding to queue
+        if (_currentPlaylistContext.value != null) {
+            Log.d(TAG, "Clearing playlist context due to manual queue addition")
+            _currentPlaylistContext.value = PlaylistContext(
+                type = PlaylistType.QUEUE_MANUAL,
+                songs = currentQueue,
+                title = "Queue"
+            )
+        }
+
         Log.d(TAG, "Added ${song.title} to queue. Queue size: ${currentQueue.size}")
 
         // If no song is currently playing, start playing the first song in queue
@@ -1126,6 +1338,13 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
             Log.d(TAG, "Removing song at index $index from queue")
             currentQueue.removeAt(index)
             _queue.value = currentQueue
+
+            // Update playlist context if it's a manual queue
+            _currentPlaylistContext.value?.let { context ->
+                if (context.type == PlaylistType.QUEUE_MANUAL) {
+                    _currentPlaylistContext.value = context.copy(songs = currentQueue)
+                }
+            }
         }
     }
 
@@ -1135,6 +1354,10 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
 
         // Clear play history
         _playHistory.value = emptyList()
+
+        // Clear playlist context
+        _currentPlaylistContext.value = null
+        _currentPlaylistIndex.value = -1
 
         // Keep only the current song in the queue if it exists
         if (_queue.value.isNotEmpty()) {
@@ -1236,19 +1459,73 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
                 }
                 _allSongs.value = updatedAllSongs
 
+                // Update in playlist context if present
+                _currentPlaylistContext.value?.let { context ->
+                    val updatedPlaylistSongs = context.songs.map { song ->
+                        if (song.id == songId) song.copy(isLiked = isLiked) else song
+                    }
+                    _currentPlaylistContext.value = context.copy(songs = updatedPlaylistSongs)
+                }
+
             } catch (e: Exception) {
                 Log.e(TAG, "Error toggling like: ${e.message}")
             }
         }
     }
 
-    // Handle song completion (called from song completion receiver)
+    // UPDATED: Handle song completion with playlist context awareness
     fun onSongCompleted(isEndOfPlayback: Boolean = false, completedSongId: String? = null) {
         Log.d(TAG, "Song completed, isEndOfPlayback: $isEndOfPlayback")
 
         val currentSong = _currentSong.value
         val queue = _queue.value
+        val playlistContext = _currentPlaylistContext.value
 
+        // If we have a playlist context, handle completion within that context
+        if (playlistContext != null) {
+            Log.d(TAG, "Song completed within playlist context: ${playlistContext.title}")
+
+            // Add current song to history
+            currentSong?.let { song ->
+                val updatedHistory = _playHistory.value.toMutableList()
+                updatedHistory.add(song)
+                _playHistory.value = updatedHistory
+                Log.d(TAG, "Added completed song to history, history size: ${updatedHistory.size}")
+            }
+
+            // Handle based on repeat mode
+            when (_repeatMode.value) {
+                2 -> {
+                    // Repeat One - should be handled by MediaPlayerService already
+                    Log.d(TAG, "Repeat One mode, handled by MediaPlayerService")
+                    return
+                }
+                1 -> {
+                    // Repeat All - continue to next song in playlist
+                    Log.d(TAG, "Repeat All mode, playing next song in playlist")
+                    playNextFromPlaylist(playlistContext)
+                    return
+                }
+                else -> {
+                    // No repeat mode
+                    val currentIndex = _currentPlaylistIndex.value
+                    if (currentIndex >= playlistContext.songs.size - 1) {
+                        // End of playlist reached
+                        Log.d(TAG, "End of playlist reached, stopping playback")
+                        _isPlaying.value = false
+                        mediaPlayerService?.resetEndOfPlaybackFlag()
+                        return
+                    } else {
+                        // Continue to next song
+                        Log.d(TAG, "Playing next song in playlist")
+                        playNextFromPlaylist(playlistContext)
+                        return
+                    }
+                }
+            }
+        }
+
+        // Original queue-based logic
         // First check if there are songs in the queue
         if (queue.size > 1) {
             // Queue memiliki lebih dari 1 lagu, putar lagu berikutnya
@@ -1334,7 +1611,6 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
         }
     }
 
-
     // Reorder song in queue
     fun moveSongInQueue(fromIndex: Int, toIndex: Int) {
         if (fromIndex == toIndex) return
@@ -1357,6 +1633,13 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
         currentQueue.add(toIndex, movedItem)
         _queue.value = currentQueue
 
+        // Update playlist context if it's a manual queue
+        _currentPlaylistContext.value?.let { context ->
+            if (context.type == PlaylistType.QUEUE_MANUAL) {
+                _currentPlaylistContext.value = context.copy(songs = currentQueue)
+            }
+        }
+
         Log.d(TAG, "Moved song in queue from $fromIndex to $toIndex, new queue size: ${currentQueue.size}")
     }
 
@@ -1373,8 +1656,10 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
             _currentSong.value = null
             _isPlaying.value = false
 
-            // Clear the queue
+            // Clear the queue and playlist context
             _queue.value = emptyList()
+            _currentPlaylistContext.value = null
+            _currentPlaylistIndex.value = -1
         } else {
             // Remove the song from the queue if present
             val currentQueue = _queue.value.toMutableList()
@@ -1383,6 +1668,19 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
             if (wasInQueue) {
                 Log.d(TAG, "Removed deleted song from queue")
                 _queue.value = currentQueue
+
+                // Update playlist context
+                _currentPlaylistContext.value?.let { context ->
+                    val updatedPlaylistSongs = context.songs.filter { it.id != songId }
+                    _currentPlaylistContext.value = context.copy(songs = updatedPlaylistSongs)
+
+                    // Update playlist index if necessary
+                    val currentIndex = _currentPlaylistIndex.value
+                    val deletedIndex = context.songs.indexOfFirst { it.id == songId }
+                    if (deletedIndex != -1 && deletedIndex < currentIndex) {
+                        _currentPlaylistIndex.value = currentIndex - 1
+                    }
+                }
             }
         }
     }
@@ -1417,6 +1715,14 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
             if (song.id == updatedSong.id) updatedSong else song
         }
         _allSongs.value = allSongsUpdated
+
+        // Update in playlist context if present
+        _currentPlaylistContext.value?.let { context ->
+            val updatedPlaylistSongs = context.songs.map { song ->
+                if (song.id == updatedSong.id) updatedSong else song
+            }
+            _currentPlaylistContext.value = context.copy(songs = updatedPlaylistSongs)
+        }
     }
 
     // Handle logout
@@ -1435,6 +1741,9 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
         _currentSong.value = null
         _isPlaying.value = false
 
+        // Clear playlist context
+        _currentPlaylistContext.value = null
+        _currentPlaylistIndex.value = -1
 
         // Stop playback
         mediaPlayerService?.stopPlayback()
@@ -1450,11 +1759,14 @@ class MainViewModel(private val songRepository: SongRepository, private val anal
         _isPlaying.value = false
         _currentSong.value = null
 
-
         // Clear queue and reset state
         _queue.value = emptyList()
         _playHistory.value = emptyList()
         _currentQueueIndex.value = -1
+
+        // Clear playlist context
+        _currentPlaylistContext.value = null
+        _currentPlaylistIndex.value = -1
 
         // Reset position and duration
         _currentPosition.value = 0

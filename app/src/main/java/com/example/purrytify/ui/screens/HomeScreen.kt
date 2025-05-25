@@ -141,6 +141,8 @@ fun HomeScreen(
             RecommendationPlaylistView(
                 playlist = selectedPlaylist!!,
                 onSongClick = { song ->
+                    // This will be handled by the component itself with playlist context
+                    // Fallback for when MainViewModel is not available
                     mainViewModel.playSong(song)
                 },
                 onAddToQueue = { song ->
@@ -151,7 +153,8 @@ fun HomeScreen(
                 },
                 onBackClick = {
                     selectedPlaylist = null
-                }
+                },
+                mainViewModel = mainViewModel // Pass MainViewModel for playlist context
             )
         } else {
             // Show main home screen
@@ -164,8 +167,8 @@ fun HomeScreen(
                     recentlyPlayed = recentlyPlayed,
                     currentSong = currentSong,
                     isPlaying = isPlaying,
-                    onPlaylistClick = { selectedPlaylist = it },
-                    onSongClick = { mainViewModel.playSong(it) },
+                    onPlaylistClick = { selectedPlaylist = it }, // This opens playlist view
+                    onSongClick = { mainViewModel.playSong(it) }, // This plays individual song
                     onAddToQueue = { song ->
                         mainViewModel.addToQueue(song)
                         scope.launch {
@@ -180,7 +183,8 @@ fun HomeScreen(
                     },
                     onQRScanClick = {
                         navController?.navigate(Destinations.QR_SCANNER_ROUTE)
-                    }
+                    },
+                    mainViewModel = mainViewModel // Pass MainViewModel for playlist context
                 )
             } else {
                 PhoneHomeLayout(
@@ -191,8 +195,8 @@ fun HomeScreen(
                     recentlyPlayed = recentlyPlayed,
                     currentSong = currentSong,
                     isPlaying = isPlaying,
-                    onPlaylistClick = { selectedPlaylist = it },
-                    onSongClick = { mainViewModel.playSong(it) },
+                    onPlaylistClick = { selectedPlaylist = it }, // This opens playlist view
+                    onSongClick = { mainViewModel.playSong(it) }, // This plays individual song
                     onAddToQueue = { song ->
                         mainViewModel.addToQueue(song)
                         scope.launch {
@@ -207,7 +211,8 @@ fun HomeScreen(
                     },
                     onQRScanClick = {
                         navController?.navigate(Destinations.QR_SCANNER_ROUTE)
-                    }
+                    },
+                    mainViewModel = mainViewModel // Pass MainViewModel for playlist context
                 )
             }
         }
@@ -236,7 +241,9 @@ private fun PhoneHomeLayout(
     onAddToQueue: (Song) -> Unit,
     onToggleLike: (Song, Boolean) -> Unit,
     onRefreshRecommendations: () -> Unit,
-    onQRScanClick: () -> Unit
+    onQRScanClick: () -> Unit,
+    mainViewModel: MainViewModel? = null // ADD this parameter
+
 ) {
     LazyColumn(
         modifier = Modifier
@@ -259,7 +266,9 @@ private fun PhoneHomeLayout(
                 onPlaylistClick = onPlaylistClick,
                 onSongClick = onSongClick,
                 onRefreshClick = onRefreshRecommendations,
-                isLoading = isRecommendationsLoading
+                isLoading = isRecommendationsLoading,
+                mainViewModel = mainViewModel // PASS MainViewModel
+
             )
             Spacer(modifier = Modifier.height(32.dp))
         }
@@ -317,7 +326,8 @@ private fun TabletHomeLayout(
     onAddToQueue: (Song) -> Unit,
     onToggleLike: (Song, Boolean) -> Unit,
     onRefreshRecommendations: () -> Unit,
-    onQRScanClick: () -> Unit
+    onQRScanClick: () -> Unit,
+    mainViewModel: MainViewModel? = null // ADD this parameter
 ) {
     Column(
         modifier = Modifier
@@ -347,7 +357,8 @@ private fun TabletHomeLayout(
                     onPlaylistClick = onPlaylistClick,
                     onSongClick = onSongClick,
                     onRefreshClick = onRefreshRecommendations,
-                    isLoading = isRecommendationsLoading
+                    isLoading = isRecommendationsLoading,
+                    mainViewModel = mainViewModel // PASS MainViewModel
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))

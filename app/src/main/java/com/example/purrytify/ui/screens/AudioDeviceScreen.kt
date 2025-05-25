@@ -1,6 +1,5 @@
 package com.example.purrytify.ui.screens
 
-import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -62,10 +61,7 @@ import com.example.purrytify.models.AudioDevice
 import com.example.purrytify.models.AudioDeviceType
 import com.example.purrytify.models.ConnectionState
 import com.example.purrytify.viewmodels.AudioDeviceViewModel
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,29 +78,6 @@ fun AudioDeviceScreen(
     val context = LocalContext.current
     // Snackbar host state
     val snackbarHostState = remember { SnackbarHostState() }
-
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE -> {
-                    Log.d("AudioDeviceScreen", "Screen paused - maintaining routing")
-                    viewModel.onScreenPause()
-                }
-                Lifecycle.Event.ON_RESUME -> {
-                    Log.d("AudioDeviceScreen", "Screen resumed - resuming monitoring")
-                    viewModel.onScreenResume()
-                }
-                else -> {}
-            }
-        }
-
-        lifecycleOwner.lifecycle.addObserver(observer)
-
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
     // Show error message
     LaunchedEffect(errorMessage) {

@@ -1,27 +1,22 @@
 package com.example.purrytify.viewmodels
 
 import android.app.Application
-import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.purrytify.models.AudioDevice
 import com.example.purrytify.util.AudioDeviceManager
-import com.example.purrytify.util.AudioRoutingManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * ViewModel untuk mengelola state audio devices
- */
+
 class AudioDeviceViewModel(application: Application) : AndroidViewModel(application) {
     private val TAG = "AudioDeviceViewModel"
 
     private val audioDeviceManager = AudioDeviceManager(application)
-    private val audioRoutingManager = AudioRoutingManager(application, audioDeviceManager)
 
     // State untuk daftar devices
     private val _audioDevices = MutableStateFlow<List<AudioDevice>>(emptyList())
@@ -46,15 +41,9 @@ class AudioDeviceViewModel(application: Application) : AndroidViewModel(applicat
     init {
         // Start collecting audio devices
         collectAudioDevices()
-
-        // Apply stored routing saat init
-        audioRoutingManager.applyStoredRouting()
     }
 
-    /**
-     * Collect audio devices dari manager
-     * Akan terus listening untuk perubahan devices
-     */
+
     private fun collectAudioDevices() {
         viewModelScope.launch {
             audioDeviceManager.audioDevices.collect { devices ->
@@ -83,10 +72,7 @@ class AudioDeviceViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    /**
-     * Check apakah ada device yang disconnect
-     * Jika active device disconnect, show error dan fallback
-     */
+
     private fun checkForDisconnection(currentDevices: List<AudioDevice>) {
         val activeDevice = _activeDevice.value ?: return
 
@@ -113,11 +99,7 @@ class AudioDeviceViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    /**
-     * PERBAIKAN: Switch ke device tertentu dengan retry mechanism
-     *
-     * @param device Device yang akan diaktifkan
-     */
+
     fun switchToDevice(device: AudioDevice) {
         Log.d(TAG, "User requested switch to: ${device.name} (${device.type})")
 
@@ -148,7 +130,7 @@ class AudioDeviceViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 }
 
-                // PERBAIKAN: Try switching with retry mechanism
+
                 var success = false
                 var attempts = 0
                 val maxAttempts = 3
@@ -175,9 +157,6 @@ class AudioDeviceViewModel(application: Application) : AndroidViewModel(applicat
                 if (success) {
                     _successMessage.value = "Switched to ${device.name}"
                     Log.d(TAG, "Successfully switched to ${device.name}")
-
-                    // TAMBAHAN: Save pilihan user untuk persistence
-                    audioRoutingManager.saveSelectedDevice(device)
 
                     // Wait a bit for the change to propagate
                     delay(500)
@@ -222,9 +201,7 @@ class AudioDeviceViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    /**
-     * TAMBAHAN: Force switch to speaker when normal switch fails
-     */
+
     private suspend fun forceSwithToSpeaker() {
         try {
             Log.d(TAG, "Force switching to speaker")
@@ -264,9 +241,7 @@ class AudioDeviceViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    /**
-     * TAMBAHAN: Notify MediaPlayerService about device switch
-     */
+
     private fun notifyMediaServiceOfDeviceSwitch(device: AudioDevice) {
         try {
             val context = getApplication<Application>()
@@ -284,24 +259,17 @@ class AudioDeviceViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    /**
-     * Clear error message
-     */
+
     fun clearError() {
         _errorMessage.value = null
     }
 
-    /**
-     * Clear success message
-     */
+
     fun clearSuccess() {
         _successMessage.value = null
     }
 
-    /**
-     * PERBAIKAN: Refresh devices list dengan force refresh
-     * Useful jika user ingin manual refresh
-     */
+
     fun refreshDevices() {
         Log.d(TAG, "Refreshing devices...")
         viewModelScope.launch {
@@ -322,9 +290,7 @@ class AudioDeviceViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    /**
-     * TAMBAHAN: Method untuk handle emergency fallback ke speaker
-     */
+
     fun emergencyFallbackToSpeaker() {
         Log.d(TAG, "Emergency fallback to speaker requested")
 
@@ -346,33 +312,13 @@ class AudioDeviceViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    /**
-     * TAMBAHAN: Handle lifecycle events untuk persistence
-     */
-    fun onScreenPause() {
-        Log.d(TAG, "Audio device screen paused - maintaining routing")
-        audioRoutingManager.onAppPause()
-    }
-
-    fun onScreenResume() {
-        Log.d(TAG, "Audio device screen resumed - resuming monitoring")
-        audioRoutingManager.onAppResume()
-    }
-
-    /**
-     * TAMBAHAN: Clear saved routing (jika user ingin reset)
-     */
-    fun clearSavedRouting() {
-        Log.d(TAG, "Clearing saved audio routing")
-        audioRoutingManager.clearSavedDevice()
-    }
-
-    /**
-     * TAMBAHAN: Factory method untuk create AudioRoutingManager
-     */
-    companion object {
-        fun createAudioRoutingManager(context: Context): AudioRoutingManager {
-            return AudioRoutingManager(context, AudioDeviceManager(context))
+    override fun onCleared() {
+        super.onCleared()
+        // Clean up any audio routing when ViewModel is destroyed
+        try {
+            audioDeviceManager.clearAudioRouting()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing audio routing on cleanup: ${e.message}")
         }
     }
 }
